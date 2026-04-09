@@ -19,6 +19,7 @@ int main() {
     if (!glfwInit()) return -1;
 
     const char* glsl_version = "#version 130";
+    glfwWindowHint(GLFW_MAXIMIZED, GLFW_TRUE);
     GLFWwindow* window = glfwCreateWindow(800, 600, "CryptoTool - SHA256 & Auth", NULL, NULL);
     if (!window) { glfwTerminate(); return -1; }
     
