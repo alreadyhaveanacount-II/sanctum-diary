@@ -20,7 +20,7 @@ int main() {
 
     const char* glsl_version = "#version 130";
     glfwWindowHint(GLFW_MAXIMIZED, GLFW_TRUE);
-    GLFWwindow* window = glfwCreateWindow(800, 600, "CryptoTool - SHA256 & Auth", NULL, NULL);
+    GLFWwindow* window = glfwCreateWindow(800, 600, "Sanctum Private Diary", NULL, NULL);
     if (!window) { glfwTerminate(); return -1; }
     
     glfwMakeContextCurrent(window);
