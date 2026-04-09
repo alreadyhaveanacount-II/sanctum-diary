@@ -59,8 +59,6 @@ namespace Pages {
 
     void view_entry() {
         const auto& entry = g_state.decrypted_entries[g_state.selected_entry_index];
-
-        ImGui::SetNextWindowSize(ImVec2(500, 450), ImGuiCond_FirstUseEver);
         
         // O ID "###view" garante que a janela seja tratada como a mesma pelo ImGui
         std::string title = entry.title + "###view";
