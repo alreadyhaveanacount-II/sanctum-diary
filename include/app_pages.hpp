@@ -64,15 +64,18 @@ namespace Pages {
         std::string title = entry.title + "###view";
 
         if (ImGui::Begin(title.c_str())) {
-            ImGui::InputText("Título", g_state.titleBuf, sizeof(g_state.titleBuf));
+            ImGui::Text("Título");
+            ImGui::PushItemWidth(-FLT_MIN);
+            ImGui::InputText("##title", g_state.titleBuf, sizeof(g_state.titleBuf));
+            ImGui::PopItemWidth();
             
             ImGui::Separator();
             ImGui::Spacing();
 
             ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.4f, 1.0f), "Conteúdo:");
-            
-            // Exibe o conteúdo em modo leitura
-            ImGui::InputTextMultiline("##content", g_state.contentBuf, sizeof(g_state.contentBuf));
+
+            float altura_disponivel = ImGui::GetContentRegionAvail().y - 120.0f;
+            ImGui::InputTextMultiline("##content", g_state.contentBuf, sizeof(g_state.contentBuf), ImVec2(-FLT_MIN, altura_disponivel));
 
             // Botão para fechar a visualização
             if (ImGui::Button("Fechar Visualização", ImVec2(-FLT_MIN, 30))) {
