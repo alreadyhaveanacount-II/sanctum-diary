@@ -275,7 +275,7 @@ namespace Pages {
     }
 
     void cleanup() {
-        Diary::save_diary_entries(g_state.curr_diary, g_state.decrypted_entries);
+        if(g_state.is_diary_decrypted) Diary::save_diary_entries(g_state.curr_diary, g_state.decrypted_entries);
 
         for (auto& entry : g_state.decrypted_entries) {
             CryptoHelper::secure_zero_memory((void*)entry.title.data(), entry.title.size());
