@@ -46,7 +46,7 @@ Each entry is serialized as:
 [M bytes — encrypted content]
 ```
 
-The validation entry is written on diary creation and used to verify the password on every subsequent open, without exposing a known-plaintext oracle (the key is verified, not the password itself).
+The validation entry is written on diary creation and used to verify the password on every subsequent open.
 
 ## Building
 
