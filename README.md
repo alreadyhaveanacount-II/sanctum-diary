@@ -29,7 +29,7 @@ Each `.sdde` file is a flat binary with the following layout:
 
 ```
 [16 bytes — salt (plaintext)]
-[Validation entry — title: "TEST ENTRY", content: "IS KEY VALID"]
+[Validation entry with a 32-byte ciphertext and a random nonce, re-randomized on every save]
 [Entry 1]
 [Entry 2]
 ...
