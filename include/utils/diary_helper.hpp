@@ -74,6 +74,37 @@ namespace Diary {
         return new_entry;
     }
 
+    DiaryEntry random_entry(const std::vector<uint8_t>& plain_key) {
+        DiaryEntry new_entry;
+        uint32_t nonce[3];
+        uint8_t tag[16];
+        CryptoHelper::gen_secure_random_bytes((uint8_t*)nonce, 12);
+
+        std::vector<uint8_t> ciphertext(32, 0);
+        CryptoHelper::gen_secure_random_bytes(ciphertext.data(), 32);
+
+        CHACHA20_POLY1305::encrypt(
+            (uint32_t*) plain_key.data(), (uint32_t*) nonce,
+            ciphertext.data(), ciphertext.size(),
+            nullptr, 0,
+            ciphertext.data(), tag
+        );
+
+        std::vector<uint8_t> final_entry;
+        final_entry.resize(44 + ciphertext.size());
+
+        uint8_t* p = final_entry.data();
+        std::memcpy(p,      tag, 16);
+        std::memcpy(p + 16, nonce, 12);
+        to_bytes_le(16, p + 28);
+        to_bytes_le(16, p + 36);
+        std::memcpy(p + 44, ciphertext.data(), ciphertext.size());
+
+        new_entry.serialized = std::move(final_entry);
+
+        return new_entry;
+    }
+
     bool test_key(
         const fs::path& diary_path,
         const std::vector<uint8_t>& plain_key
@@ -176,7 +207,7 @@ namespace Diary {
 
     void save_diary_entries(const fs::path& diary_path, const std::vector<DiaryEntry>& entries) {
         if(entries.empty()) return;
-        
+
         size_t total_entry_size = 0;
         for (const auto& entry : entries) {
             total_entry_size += entry.serialized.size();
