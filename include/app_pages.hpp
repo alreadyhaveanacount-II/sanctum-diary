@@ -216,7 +216,7 @@ namespace Pages {
             bool all_went_right = true;
 
             if(g_state.is_diary_new) {
-                Diary::DiaryEntry test_entry = Diary::add_entry("TEST ENTRY", "IS KEY VALID", derivated);
+                Diary::DiaryEntry test_entry = Diary::random_entry(derivated);
                 append_binary(g_state.curr_diary, test_entry.serialized.data(), test_entry.serialized.size());
             } else {
                 if(!Diary::test_key(g_state.curr_diary, derivated)) {
@@ -244,7 +244,10 @@ namespace Pages {
     }
 
     void lock_sensitive_data() {
-        Diary::save_diary_entries(g_state.curr_diary, g_state.decrypted_entries);
+        if(g_state.is_diary_decrypted) {
+            g_state.decrypted_entries[0] = Diary::random_entry(g_state.keydata);
+            Diary::save_diary_entries(g_state.curr_diary, g_state.decrypted_entries);
+        }
 
         for (auto& entry : g_state.decrypted_entries) {
             std::fill(entry.title.begin(), entry.title.end(), 0);
@@ -275,7 +278,10 @@ namespace Pages {
     }
 
     void cleanup() {
-        if(g_state.is_diary_decrypted) Diary::save_diary_entries(g_state.curr_diary, g_state.decrypted_entries);
+        if(g_state.is_diary_decrypted) {
+            g_state.decrypted_entries[0] = Diary::random_entry(g_state.keydata);
+            Diary::save_diary_entries(g_state.curr_diary, g_state.decrypted_entries);
+        }
 
         for (auto& entry : g_state.decrypted_entries) {
             CryptoHelper::secure_zero_memory((void*)entry.title.data(), entry.title.size());
