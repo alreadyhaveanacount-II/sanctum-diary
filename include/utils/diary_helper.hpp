@@ -175,6 +175,8 @@ namespace Diary {
     }
 
     void save_diary_entries(const fs::path& diary_path, const std::vector<DiaryEntry>& entries) {
+        if(entries.empty()) return;
+        
         size_t total_entry_size = 0;
         for (const auto& entry : entries) {
             total_entry_size += entry.serialized.size();
