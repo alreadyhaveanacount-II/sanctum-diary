@@ -192,24 +192,54 @@ namespace Pages {
     }
 
     void handle_password() {
+        static uint32_t N_exponent = 20; // 2^20 
+        static uint32_t r = 8, p = 1, dkLen = 32;
+
         ImGui::Begin("Senha do Diário", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
 
         ImGui::Text("Digite sua senha:");
         ImGui::InputText("##pwd", g_state.pwdBuffer, IM_ARRAYSIZE(g_state.pwdBuffer), ImGuiInputTextFlags_Password | ImGuiInputTextFlags_EnterReturnsTrue);
+
+        ImGui::Separator();
+        ImGui::Text("Scrypt Parameters(don't enter any if the file isn't new)");
+
+        uint32_t min_v = 1;
+        uint32_t max_v = 20;   
+
+        ImGui::SliderScalar("N exponent(2^N)", ImGuiDataType_U32, &N_exponent, &min_v, &max_v, "%u");
+
+        if(ImGui::InputScalar("r", ImGuiDataType_U32, &r)) {
+            if ((uint64_t)r * (uint64_t)p > (1ULL << 30)) {
+                r = (uint32_t)((1ULL << 30) / (uint64_t)p);
+            }
+        }
+
+        if(ImGui::InputScalar("p", ImGuiDataType_U32, &p)) {
+            if ((uint64_t)r * (uint64_t)p > (1ULL << 30)) {
+                p = (uint32_t)((1ULL << 30) / (uint64_t)r);
+            }
+        }
 
         ImGui::Spacing();
         ImGui::Separator();
         ImGui::Spacing();
 
         if (ImGui::Button("Entrar")) {
-            // 1. Scrypt parameters
-            uint64_t N = 131072; uint32_t r = 8, p = 1, dkLen = 32;
+            uint64_t N = 1 << N_exponent;
 
             // 2. Getting salt
             std::vector<uint8_t> salt = read_file_range(g_state.curr_diary, 0, 16);
 
             // Deriving key
             std::vector<uint8_t> password(g_state.pwdBuffer, g_state.pwdBuffer + strlen(g_state.pwdBuffer));
+
+            if(!g_state.is_diary_new) {
+                std::vector<uint8_t> nrp = read_file_range(g_state.curr_diary, 16, 16);
+                N = Diary::from_bytes_le(nrp.data());
+                r = Diary::from_bytes_le_u32(nrp.data()+8);
+                p = Diary::from_bytes_le_u32(nrp.data()+12);
+            }
+
             Scrypt scryptengine(password, salt, N, r, p, dkLen);
             std::vector<uint8_t> derivated = scryptengine.kdf();
 
@@ -217,6 +247,13 @@ namespace Pages {
 
             if(g_state.is_diary_new) {
                 Diary::DiaryEntry test_entry = Diary::random_entry(derivated);
+
+                uint8_t params[16];
+                Diary::to_bytes_le(N, params);
+                Diary::to_bytes_le_u32(r, params+8);
+                Diary::to_bytes_le_u32(p, params+12);
+
+                append_binary(g_state.curr_diary, params, 16);
                 append_binary(g_state.curr_diary, test_entry.serialized.data(), test_entry.serialized.size());
             } else {
                 if(!Diary::test_key(g_state.curr_diary, derivated)) {
