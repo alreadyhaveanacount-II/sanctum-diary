@@ -7,6 +7,7 @@
 #include <string>
 #include <cstring>
 #include <optional>
+#define DIARY_ENTRIES_START 32
 
 namespace Diary {
     struct DiaryEntry {
@@ -37,6 +38,21 @@ namespace Diary {
            ((uint64_t)arr[6] << 48)    |
            ((uint64_t)arr[7] << 56);
     }
+
+    void to_bytes_le_u32(uint32_t val, uint8_t* arr) {
+        arr[0] = (uint8_t)(val & 0xFF);
+        arr[1] = (uint8_t)((val >> 8) & 0xFF);
+        arr[2] = (uint8_t)((uint32_t)val >> 16 & 0xFF);
+        arr[3] = (uint8_t)((uint32_t)val >> 24 & 0xFF);
+    }
+
+    uint32_t from_bytes_le_u32(uint8_t* arr) {
+        return  (uint32_t)arr[0]        |
+            ((uint32_t)arr[1] << 8)  |
+            ((uint32_t)arr[2] << 16) |
+            ((uint32_t)arr[3] << 24);
+    }
+
 
     DiaryEntry add_entry(const std::string title, const std::string content, const std::vector<uint8_t>& plain_key) {
         DiaryEntry new_entry;
@@ -110,7 +126,7 @@ namespace Diary {
         const std::vector<uint8_t>& plain_key
     ) {
         // Getting tag+nonce+title len+content len
-        std::vector<uint8_t> test_entry_data = read_file_range(diary_path, 16, 44);
+        std::vector<uint8_t> test_entry_data = read_file_range(diary_path, DIARY_ENTRIES_START, 44);
 
         uint8_t tag[16];
         uint8_t nonce[12];
@@ -121,7 +137,7 @@ namespace Diary {
         std::memcpy(nonce, test_entry_data.data()+16, 12);
 
         uint64_t total_cipher_len = title_len + content_len;
-        std::vector<uint8_t> ciphertext = read_file_range(diary_path, 60, total_cipher_len);
+        std::vector<uint8_t> ciphertext = read_file_range(diary_path, DIARY_ENTRIES_START+44, total_cipher_len);
 
         try {
             CHACHA20_POLY1305::decrypt(
@@ -183,7 +199,7 @@ namespace Diary {
         size_t file_size = get_file_size(diary_path);
         if (file_size <= 16) return {};
 
-        std::vector<uint8_t> data = read_file_range(diary_path, 16, file_size - 16);
+        std::vector<uint8_t> data = read_file_range(diary_path, DIARY_ENTRIES_START, file_size - DIARY_ENTRIES_START);
         
         std::vector<DiaryEntry> entries;
         uint8_t* ptr = data.data();
@@ -221,7 +237,7 @@ namespace Diary {
             data_ptr += entry.serialized.size();
         }
 
-        truncate_file(diary_path, total_entry_size+16);
-        rewrite_binary_section(diary_path, encrypted_data.data(), encrypted_data.size(), 16);
+        truncate_file(diary_path, DIARY_ENTRIES_START);
+        rewrite_binary_section(diary_path, encrypted_data.data(), encrypted_data.size(), DIARY_ENTRIES_START);
     }
 }
