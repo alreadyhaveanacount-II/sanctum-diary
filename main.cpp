@@ -15,7 +15,7 @@
 
 StateMachine g_state;
 
-int main() {
+int main(int argc, char* argv[]) {
     if (!glfwInit()) return -1;
 
     const char* glsl_version = "#version 130";
@@ -34,6 +34,24 @@ int main() {
 
     g_state.currentPage = PageEnum::OPEN_DB;
     g_state.hwnd = glfwGetWin32Window(window);
+
+    HWND win32_hwnd = (HWND)g_state.hwnd; 
+
+    HICON hIcon = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(101)); 
+
+    if (hIcon) {
+        SendMessage(win32_hwnd, WM_SETICON, ICON_BIG, (LPARAM)hIcon);
+        SendMessage(win32_hwnd, WM_SETICON, ICON_SMALL, (LPARAM)hIcon);
+    }
+
+    if (argc > 1) {
+        fs::path file_path(argv[1]);
+        if (fs::exists(file_path) && file_path.extension() == ".sdde") {
+            g_state.curr_diary = file_path;
+            g_state.is_diary_new = false;
+            g_state.currentPage = PageEnum::TYPE_PWD;
+        }
+    }
 
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
