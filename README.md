@@ -82,7 +82,8 @@ The build script compiles `main.cpp` alongside all ImGui sources in `include/img
 ## How to link Sanctum to .sdde files
 
 1. Launch cmd in Administrator mode
-2. Run ```cmd
+2. Run
+   ```bat
    assoc .sdde=SanctumDiary
    ftype SanctumDiary="C:\caminho\para\sanctum.exe" "%1"
    ```
