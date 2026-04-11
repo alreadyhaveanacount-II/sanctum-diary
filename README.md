@@ -5,7 +5,7 @@ A local, encrypted diary application for Windows. Entries are protected with Cha
 ## Features
 
 - **Encrypted at rest** — all entries are encrypted using ChaCha20-Poly1305 (AEAD)
-- **Password-based key derivation** — scrypt (N=131072, r=8, p=1) ensures brute-force resistance
+- **Configurable key derivation** — scrypt parameters (N, r, p) are chosen at diary creation and stored in the vault header
 - **Windows Hello integration** — the session key can be wrapped/unwrapped using Windows Hello for seamless re-authentication
 - **Auto-lock** — diary locks automatically after 60 seconds of inactivity
 - **Secure memory handling** — sensitive buffers are zeroed after use and locked in memory to prevent swapping
@@ -16,10 +16,10 @@ A local, encrypted diary application for Windows. Entries are protected with Cha
 All cryptographic primitives are implemented from scratch — no OpenSSL, libsodium, or OS crypto APIs are used for the core cipher work.
 
 | Primitive | Notes |
-|-------------------|----------------------------------------------------------------------------------|
+|---|---|
 | ChaCha20-Poly1305 | AVX-512 optimized; processes multiple blocks in parallel using 512-bit registers |
-| SHA-256           | Portable scalar implementation (no SHA-NI)                                       |
-| scrypt            | Built on top of the ChaCha20 and SHA-256 implementations above                   |
+| SHA-256 | Portable scalar implementation (no SHA-NI) |
+| scrypt | Built on top of the ChaCha20 and SHA-256 implementations above |
 
 All implementations are validated against the official IETF/NIST test vectors for their respective primitives.
 
@@ -29,7 +29,8 @@ Each `.sdde` file is a flat binary with the following layout:
 
 ```
 [16 bytes — salt (plaintext)]
-[Validation entry with a 32-byte ciphertext and a random nonce, re-randomized on every save]
+[16 bytes — scrypt parameters: N (8 bytes LE) + r (4 bytes LE) + p (4 bytes LE)]
+[Validation entry]
 [Entry 1]
 [Entry 2]
 ...
@@ -42,17 +43,17 @@ Each entry is serialized as:
 [12 bytes — ChaCha20 nonce]
 [ 8 bytes — title length (LE)]
 [ 8 bytes — content length (LE)]
-[N bytes — encrypted title]
-[M bytes — encrypted content]
+[N bytes — encrypted title + content (concatenated, single ciphertext)]
 ```
 
-The validation entry is written on diary creation and used to verify the password on every subsequent open.
+The first entry after the header is a random validation entry: 32 bytes of CSPRNG data encrypted with the derived key. On open, decrypting it and verifying the Poly1305 tag confirms the key is correct without relying on any known plaintext. On every save it is replaced with a freshly randomized entry.
 
 ## Building
 
 Requirements:
 - Windows (Windows Hello APIs are used for session key wrapping)
-- Clang with C++20 support
+- AVX-512 capable CPU (required by the ChaCha20-Poly1305 implementation)
+- A C++17-compatible compiler (MSVC recommended)
 - GLFW3 (`glfw3.dll` must be present alongside the executable)
 
 ```bat
@@ -65,14 +66,16 @@ The build script compiles `main.cpp` alongside all ImGui sources in `include/img
 
 1. Launch `main.exe`
 2. Enter a path for a new or existing diary (without the `.sdde` extension)
-3. Enter your password — the key is derived and never stored on disk
-4. Create, view, edit, and delete entries
-5. The diary auto-locks after 60 seconds out of focus; unlock with Windows Hello
+3. **New diary:** choose your scrypt parameters (N exponent, r, p) and enter a password — parameters are stored in the vault and never need to be entered again
+4. **Existing diary:** enter your password — parameters are read from the vault automatically
+5. Create, view, edit, and delete entries
+6. The diary auto-locks after 60 seconds out of focus; unlock with Windows Hello
 
 ## Security Notes
 
-- The scrypt parameters (N=131072) are intentionally expensive to resist offline attacks. Expect ~1–3 seconds on first unlock.
-- Nonces are generated randomly per entry; tag+nonce uniqueness is the caller's responsibility for entries that are re-saved.
+- scrypt parameters are configurable at creation time. Higher N increases key derivation cost and resistance to offline attacks. The parameters are stored unencrypted in the vault header — this is intentional, as they contain no secret information.
+- Title and content are concatenated into a single plaintext before encryption. The lengths are stored in the header so they can be split on decryption. This means the tag covers both fields together.
+- Nonces are generated randomly per entry using a CSPRNG. A fresh nonce is generated whenever an entry is created or re-saved.
 - `CryptoHelper::secure_zero_memory` is used on all sensitive buffers before deallocation to prevent secrets from lingering in process memory.
 - Windows Hello key wrapping is a session convenience feature — the raw derived key is never written to disk in any form.
 
