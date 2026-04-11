@@ -141,6 +141,10 @@ namespace Pages {
                 g_state.currentPage = PageEnum::ENTRY_SELECT;
             }
         }
+
+        if (ImGui::Button("Fechar Visualização", ImVec2(-FLT_MIN, 30))) {
+            g_state.currentPage = PageEnum::ENTRY_SELECT;
+        }
     }
 
     void open_diary() {
