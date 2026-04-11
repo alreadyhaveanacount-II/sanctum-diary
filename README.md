@@ -79,6 +79,9 @@ The build script compiles `main.cpp` alongside all ImGui sources in `include/img
 - `CryptoHelper::secure_zero_memory` is used on all sensitive buffers before deallocation to prevent secrets from lingering in process memory.
 - Windows Hello key wrapping is a session convenience feature — the raw derived key is never written to disk in any form.
 
+## Attribution
+[Icon.ico created by Marsiholo - Flaticon](https://www.flaticon.com/free-icons/secret)
+
 ## Project Structure
 
 ```
