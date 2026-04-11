@@ -53,7 +53,7 @@ The first entry after the header is a random validation entry: 32 bytes of CSPRN
 Requirements:
 - Windows (Windows Hello APIs are used for session key wrapping)
 - AVX-512 capable CPU (required by the ChaCha20-Poly1305 implementation)
-- A C++17-compatible compiler (MSVC recommended)
+- Clang with C++20 support
 - GLFW3 (`glfw3.dll` must be present alongside the executable)
 
 ```bat
