@@ -64,7 +64,7 @@ The build script compiles `main.cpp` alongside all ImGui sources in `include/img
 
 ## Usage
 
-1. Launch `main.exe`
+1. Launch `Sanctum.exe`
 2. Enter a path for a new or existing diary (without the `.sdde` extension)
 3. **New diary:** choose your scrypt parameters (N exponent, r, p) and enter a password — parameters are stored in the vault and never need to be entered again
 4. **Existing diary:** enter your password — parameters are read from the vault automatically
@@ -78,6 +78,14 @@ The build script compiles `main.cpp` alongside all ImGui sources in `include/img
 - Nonces are generated randomly per entry using a CSPRNG. A fresh nonce is generated whenever an entry is created or re-saved.
 - `CryptoHelper::secure_zero_memory` is used on all sensitive buffers before deallocation to prevent secrets from lingering in process memory.
 - Windows Hello key wrapping is a session convenience feature — the raw derived key is never written to disk in any form.
+
+## How to link Sanctum to .sdde files
+
+1. Launch cmd in Administrator mode
+2. Run ```cmd
+   assoc .sdde=SanctumDiary
+   ftype SanctumDiary="C:\caminho\para\sanctum.exe" "%1"
+   ```
 
 ## Attribution
 [Icon.ico created by Marsiholo - Flaticon](https://www.flaticon.com/free-icons/secret)
