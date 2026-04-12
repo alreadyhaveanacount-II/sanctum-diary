@@ -56,7 +56,7 @@ namespace Diary {
             ((uint32_t)arr[3] << 24);
     }
 
-    DiaryEntry add_entry(const std::string title, const std::string content, const std::vector<uint8_t>& plain_key) {
+    DiaryEntry add_entry(const std::string& title, const std::string& content, const std::vector<uint8_t>& plain_key, uint64_t timestamp_=0) {
         DiaryEntry new_entry;
         new_entry.title = title;
         new_entry.content = content;
@@ -67,7 +67,7 @@ namespace Diary {
         uint8_t timestamp[8];
         auto duration = std::chrono::system_clock::now().time_since_epoch();
         uint64_t millis = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(duration).count());
-        new_entry.timestamp = millis;
+        new_entry.timestamp = (timestamp_ == 0) ? millis : timestamp_;
 
         to_bytes_le(millis, timestamp);
 
