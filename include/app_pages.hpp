@@ -189,7 +189,7 @@ namespace Pages {
 
             float altura_disponivel = ImGui::GetContentRegionAvail().y - 120.0f;
 
-            ImGui::PushTextWrapPos(0.0f); 
+            ImGui::PushTextWrapPos(0.0f);
             ImGui::InputTextMultiline("##content", g_state.contentBuf, sizeof(g_state.contentBuf), ImVec2(-FLT_MIN, altura_disponivel), ImGuiInputTextFlags_AllowTabInput);
             ImGui::PopTextWrapPos();
 
@@ -235,7 +235,10 @@ namespace Pages {
 
         ImGui::Spacing();
         ImGui::Text("Conteúdo");
-        ImGui::InputTextMultiline("##content", g_state.contentBuf, sizeof(g_state.contentBuf), ImVec2(-FLT_MIN, -50));
+        
+        ImGui::PushTextWrapPos(0.0f);
+        ImGui::InputTextMultiline("##content", g_state.contentBuf, sizeof(g_state.contentBuf), ImVec2(-FLT_MIN, -85), ImGuiInputTextFlags_AllowTabInput); 
+        ImGui::PopTextWrapPos();
 
         ImGui::Spacing();
         if (ImGui::Button("Salvar Entrada", ImVec2(-FLT_MIN, 40))) {
