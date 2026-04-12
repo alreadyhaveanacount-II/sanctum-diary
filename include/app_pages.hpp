@@ -72,7 +72,7 @@ namespace Pages {
                 }
 
                 if (match)
-                    filtered_indices.push_back(i);
+                    filtered_indices.push_back(i); // stores real index into decrypted_entries
             }
         }
 
@@ -80,7 +80,6 @@ namespace Pages {
         ImGui::Spacing();
 
         if (ImGui::Button("+ Nova Entrada", ImVec2(-FLT_MIN, 45))) {
-            // Reset state before leaving
             CryptoHelper::secure_zero_memory(searchBuffer, sizeof(searchBuffer));
             filtered_indices.clear();
             search_active = false;
@@ -92,22 +91,17 @@ namespace Pages {
         ImGui::Separator();
         ImGui::Spacing();
 
-        // Determine which indices to render
-        const bool use_filter = search_active;
-
         if (ImGui::BeginChild("ScrollableList", ImVec2(0, 0), true)) {
-            // Iterate real indices directly, no copy
-            size_t render_count = use_filter
+            size_t render_count = search_active
                 ? filtered_indices.size()
-                : g_state.decrypted_entries.size() - 1; // exclude [0]
+                : g_state.decrypted_entries.size() - 1;
 
             for (size_t i = 0; i < render_count; ++i) {
-                size_t real_idx = use_filter
-                    ? filtered_indices[i]
-                    : i + 1; // offset by 1 to skip validation entry
+                // real_idx always points into decrypted_entries, regardless of filter state
+                size_t real_idx = search_active ? filtered_indices[i] : i + 1;
 
                 auto& entry = g_state.decrypted_entries[real_idx];
-                bool isSelected = (g_state.selected_entry_timestamp == entry.timestamp);
+                bool isSelected = (g_state.selected_entry_index == real_idx);
 
                 std::string selectableId = entry.title + "##" + std::to_string(real_idx);
 
@@ -119,7 +113,7 @@ namespace Pages {
                         ImGuiSelectableFlags_AllowOverlap,
                         ImVec2(0, 60)))
                 {
-                    g_state.selected_entry_timestamp = entry.timestamp;
+                    g_state.selected_entry_index = real_idx; // always a decrypted_entries index
 
                     std::memset(g_state.titleBuf, 0, sizeof(g_state.titleBuf));
                     std::strncpy(g_state.titleBuf, entry.title.c_str(), sizeof(g_state.titleBuf) - 1);
@@ -127,7 +121,6 @@ namespace Pages {
                     std::memset(g_state.contentBuf, 0, sizeof(g_state.contentBuf));
                     std::strncpy(g_state.contentBuf, entry.content.c_str(), sizeof(g_state.contentBuf) - 1);
 
-                    // Reset state before leaving
                     CryptoHelper::secure_zero_memory(searchBuffer, sizeof(searchBuffer));
                     filtered_indices.clear();
                     search_active = false;
@@ -215,7 +208,7 @@ namespace Pages {
                 if (strlen(g_state.titleBuf) > 0 && strlen(g_state.contentBuf) > 0) {
                     Diary::DiaryEntry new_entry = Diary::add_entry(
                         std::string(g_state.titleBuf), std::string(g_state.contentBuf),
-                        g_state.keydata
+                        g_state.keydata, g_state.decrypted_entries[g_state.selected_entry_index].timestamp
                     );
 
                     g_state.decrypted_entries[g_state.selected_entry_index] = new_entry;
