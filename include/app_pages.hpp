@@ -189,14 +189,14 @@ namespace Pages {
 
             float altura_disponivel = ImGui::GetContentRegionAvail().y - 120.0f;
 
-            ImGui::PushTextWrapPos(0.0f);
             ImGui::InputTextMultiline("##content", g_state.contentBuf, sizeof(g_state.contentBuf), ImVec2(-FLT_MIN, altura_disponivel), ImGuiInputTextFlags_AllowTabInput);
-            ImGui::PopTextWrapPos();
 
             // Botão para fechar a visualização
             if (ImGui::Button("Fechar Visualização", ImVec2(-FLT_MIN, 30))) {
                 g_state.selected_entry_index = -1;
                 g_state.currentPage = PageEnum::ENTRY_SELECT;
+                CryptoHelper::secure_zero_memory(g_state.titleBuf, sizeof(g_state.titleBuf));
+                CryptoHelper::secure_zero_memory(g_state.contentBuf, sizeof(g_state.contentBuf));
             }
 
             if (ImGui::Button("Apagar", ImVec2(-FLT_MIN, 30))) {
@@ -236,9 +236,7 @@ namespace Pages {
         ImGui::Spacing();
         ImGui::Text("Conteúdo");
         
-        ImGui::PushTextWrapPos(0.0f);
         ImGui::InputTextMultiline("##content", g_state.contentBuf, sizeof(g_state.contentBuf), ImVec2(-FLT_MIN, -85), ImGuiInputTextFlags_AllowTabInput); 
-        ImGui::PopTextWrapPos();
 
         ImGui::Spacing();
         if (ImGui::Button("Salvar Entrada", ImVec2(-FLT_MIN, 40))) {
@@ -263,6 +261,8 @@ namespace Pages {
 
         if (ImGui::Button("Fechar Visualização", ImVec2(-FLT_MIN, 30))) {
             g_state.currentPage = PageEnum::ENTRY_SELECT;
+            CryptoHelper::secure_zero_memory(g_state.titleBuf, sizeof(g_state.titleBuf));
+            CryptoHelper::secure_zero_memory(g_state.contentBuf, sizeof(g_state.contentBuf));
         }
     }
 
