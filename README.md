@@ -9,6 +9,7 @@ A local, encrypted diary application for Windows. Entries are protected with Cha
 - **Windows Hello integration** — the session key can be wrapped/unwrapped using Windows Hello for seamless re-authentication
 - **Auto-lock** — diary locks automatically after 60 seconds of inactivity
 - **Secure memory handling** — sensitive buffers are zeroed after use and locked in memory to prevent swapping
+- **Entry searching** — allows searching for entries via title or date
 - **Immediate UI** — built with [Dear ImGui](https://github.com/ocornut/imgui) + OpenGL/GLFW, no dependencies on heavy GUI frameworks
 
 ## Cryptographic Implementations
@@ -41,6 +42,7 @@ Each entry is serialized as:
 ```
 [16 bytes — Poly1305 authentication tag]
 [12 bytes — ChaCha20 nonce]
+[ 8 bytes — timestamp (LE)]
 [ 8 bytes — title length (LE)]
 [ 8 bytes — content length (LE)]
 [N bytes — encrypted title + content (concatenated, single ciphertext)]
@@ -52,7 +54,7 @@ The first entry after the header is a random validation entry: 32 bytes of CSPRN
 
 Requirements:
 - Windows (Windows Hello APIs are used for session key wrapping)
-- AVX-512 capable CPU (required by the ChaCha20-Poly1305 implementation)
+- Preferrably AVX-512 capable CPU(for speed, but works on other CPUs due to Clang Extended Vectors)
 - Clang with C++20 support
 - GLFW3 (`glfw3.dll` must be present alongside the executable)
 
