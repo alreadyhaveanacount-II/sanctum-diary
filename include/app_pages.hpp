@@ -8,6 +8,7 @@
 #include "utils/file_ops.hpp"
 #include "utils/diary_helper.hpp"
 #include <cstddef>
+#include <format>
 #include <cstdint>
 #include <iostream>
 #include <vector>
@@ -43,6 +44,18 @@ namespace Pages {
                     std::strncpy(g_state.contentBuf, entry.content.c_str(), sizeof(g_state.contentBuf) - 1);
                 }
 
+                ImGui::SameLine();
+                float posX = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - 150;
+                ImGui::SetCursorPosX(posX);
+                auto tp_ms = std::chrono::time_point_cast<std::chrono::milliseconds>(
+                std::chrono::system_clock::time_point{std::chrono::milliseconds{entry.timestamp}}
+                );
+
+                auto local_tp = std::chrono::current_zone()->to_local(tp_ms);
+                std::string full_date = std::format("{:%d/%m/%Y, %H:%M:%S}", local_tp);
+
+                ImGui::TextDisabled("%s", full_date.c_str());
+
                 // Mostrar uma prévia do conteúdo (opcional)
                 ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.7f, 0.7f, 0.7f, 1.0f));
                 ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 35); // Ajusta para escrever dentro do selectable
@@ -64,6 +77,17 @@ namespace Pages {
         std::string title = entry.title + "###view";
 
         if (ImGui::Begin(title.c_str())) {
+            auto tp_ms = std::chrono::time_point_cast<std::chrono::milliseconds>(
+                std::chrono::system_clock::time_point{std::chrono::milliseconds{entry.timestamp}}
+            );
+
+            auto local_tp = std::chrono::current_zone()->to_local(tp_ms);
+            std::string full_date = std::format("{:%d/%m/%Y, %H:%M:%S}", local_tp);
+
+            ImGui::Text("Data: %s", full_date.c_str());
+            ImGui::Separator();
+            ImGui::Spacing();
+
             ImGui::Text("Título");
             ImGui::PushItemWidth(-FLT_MIN);
             ImGui::InputText("##title", g_state.titleBuf, sizeof(g_state.titleBuf));
