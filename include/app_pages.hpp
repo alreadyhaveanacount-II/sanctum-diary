@@ -324,7 +324,7 @@ namespace Pages {
         ImGui::InputText("##pwd", g_state.pwdBuffer, IM_ARRAYSIZE(g_state.pwdBuffer), ImGuiInputTextFlags_Password | ImGuiInputTextFlags_EnterReturnsTrue);
 
         ImGui::Separator();
-        ImGui::Text("Scrypt Parameters(don't enter any if the file isn't new)");
+        ImGui::Text("Scrypt (alterar apenas se for um arquivo novo)");
 
         uint32_t min_v = 1;
         uint32_t max_v = 20;   
