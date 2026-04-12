@@ -42,7 +42,7 @@ Each entry is serialized as:
 ```
 [16 bytes — Poly1305 authentication tag]
 [12 bytes — ChaCha20 nonce]
-[ 8 bytes — timestamp (LE)]
+[ 8 bytes — timestamp (LE) (used for AAD)]
 [ 8 bytes — title length (LE)]
 [ 8 bytes — content length (LE)]
 [N bytes — encrypted title + content (concatenated, single ciphertext)]
