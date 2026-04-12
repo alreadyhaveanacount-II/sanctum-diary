@@ -40,7 +40,7 @@ namespace Pages {
         ImGui::SameLine();
         ImGui::Text("(DD/MM/YYYY)");
 
-        if (ImGui::Button("Search", ImVec2(-FLT_MIN, 20))) {
+        if (ImGui::Button("Pesquisar", ImVec2(-FLT_MIN, 20))) {
             filtered_indices.clear();
             search_active = true;
 
@@ -115,10 +115,10 @@ namespace Pages {
                 {
                     g_state.selected_entry_index = real_idx; // always a decrypted_entries index
 
-                    std::memset(g_state.titleBuf, 0, sizeof(g_state.titleBuf));
+                    CryptoHelper::secure_zero_memory(g_state.titleBuf, sizeof(g_state.titleBuf));
                     std::strncpy(g_state.titleBuf, entry.title.c_str(), sizeof(g_state.titleBuf) - 1);
 
-                    std::memset(g_state.contentBuf, 0, sizeof(g_state.contentBuf));
+                    CryptoHelper::secure_zero_memory(g_state.contentBuf, sizeof(g_state.contentBuf));
                     std::strncpy(g_state.contentBuf, entry.content.c_str(), sizeof(g_state.contentBuf) - 1);
 
                     CryptoHelper::secure_zero_memory(searchBuffer, sizeof(searchBuffer));
@@ -188,7 +188,10 @@ namespace Pages {
             ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.4f, 1.0f), "Conteúdo:");
 
             float altura_disponivel = ImGui::GetContentRegionAvail().y - 120.0f;
-            ImGui::InputTextMultiline("##content", g_state.contentBuf, sizeof(g_state.contentBuf), ImVec2(-FLT_MIN, altura_disponivel));
+
+            ImGui::PushTextWrapPos(0.0f); 
+            ImGui::InputTextMultiline("##content", g_state.contentBuf, sizeof(g_state.contentBuf), ImVec2(-FLT_MIN, altura_disponivel), ImGuiInputTextFlags_AllowTabInput);
+            ImGui::PopTextWrapPos();
 
             // Botão para fechar a visualização
             if (ImGui::Button("Fechar Visualização", ImVec2(-FLT_MIN, 30))) {
