@@ -13,7 +13,6 @@ struct StateMachine {
     std::vector<uint8_t> keydata;
     HANDLE hwnd;
     double last_focused_time;
-    uint64_t selected_entry_timestamp;
     std::vector<Diary::DiaryEntry> decrypted_entries;
     char titleBuf[128];
     char contentBuf[4096];
