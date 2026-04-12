@@ -15,58 +15,154 @@
 
 namespace Pages {
     void entry_select() {
+        static char searchBuffer[100] = {};
+        static std::vector<size_t> filtered_indices;
+        static bool search_active = false;
+        static int day = 0, month = 0, year = 0;
+
         ImGui::Begin("Selecione uma entrada", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
 
+        ImGui::Text("Pesquisar por texto em título");
+        ImGui::InputText("##search", searchBuffer, sizeof(searchBuffer));
+
+        ImGui::PushItemWidth(40);
+        ImGui::InputInt("##day", &day, 0, 0);
+        ImGui::SameLine();
+        ImGui::Text("/");
+        ImGui::SameLine();
+        ImGui::InputInt("##month", &month, 0, 0);
+        ImGui::SameLine();
+        ImGui::Text("/");
+        ImGui::SameLine();
+        ImGui::PushItemWidth(60);
+        ImGui::InputInt("##year", &year, 0, 0);
+        ImGui::PopItemWidth();
+        ImGui::SameLine();
+        ImGui::Text("(DD/MM/YYYY)");
+
+        if (ImGui::Button("Search", ImVec2(-FLT_MIN, 20))) {
+            filtered_indices.clear();
+            search_active = true;
+
+            std::string searchStr = searchBuffer;
+            std::transform(searchStr.begin(), searchStr.end(), searchStr.begin(), ::tolower);
+
+            for (size_t i = 1; i < g_state.decrypted_entries.size(); ++i) {
+                auto& entry = g_state.decrypted_entries[i];
+                bool match = true;
+
+                if (!searchStr.empty()) {
+                    std::string titleLower = entry.title;
+                    std::transform(titleLower.begin(), titleLower.end(), titleLower.begin(), ::tolower);
+                    if (titleLower.find(searchStr) == std::string::npos)
+                        match = false;
+                }
+
+                if (match && (day != 0 || month != 0 || year != 0)) {
+                    auto tp = std::chrono::system_clock::time_point{
+                        std::chrono::milliseconds{entry.timestamp}
+                    };
+                    auto lt = std::chrono::current_zone()->to_local(tp);
+                    auto days_floor = std::chrono::floor<std::chrono::days>(lt);
+                    std::chrono::year_month_day ymd{days_floor};
+
+                    if (day   != 0 && (int)(unsigned)ymd.day()   != day)   match = false;
+                    if (month != 0 && (int)(unsigned)ymd.month() != month) match = false;
+                    if (year  != 0 && (int)ymd.year()            != year)  match = false;
+                }
+
+                if (match)
+                    filtered_indices.push_back(i);
+            }
+        }
+
+        ImGui::Separator();
+        ImGui::Spacing();
+
         if (ImGui::Button("+ Nova Entrada", ImVec2(-FLT_MIN, 45))) {
+            // Reset state before leaving
+            CryptoHelper::secure_zero_memory(searchBuffer, sizeof(searchBuffer));
+            filtered_indices.clear();
+            search_active = false;
+            day = month = year = 0;
+
             g_state.currentPage = PageEnum::CREATE_ENTRY;
         }
 
         ImGui::Separator();
         ImGui::Spacing();
 
-        if (ImGui::BeginChild("ScrollableList", ImVec2(0, 0), true)) {
-            for (size_t i = 1; i < g_state.decrypted_entries.size(); ++i) {
-                auto& entry = g_state.decrypted_entries[i];
-                
-                // Criamos um ID único combinando o índice e o título
-                std::string id = entry.title + "##" + std::to_string(i);
+        // Determine which indices to render
+        const bool use_filter = search_active;
 
-                // Bloco vertical (Selectable com altura fixa)
-                if (ImGui::Selectable(id.c_str(), g_state.selected_entry_index == i, 0, ImVec2(0, 60))) {
-                    g_state.selected_entry_index = i;
-                    g_state.currentPage = PageEnum::VIEW_ENTRY;
-                    auto& entry = g_state.decrypted_entries[i];
-    
+        if (ImGui::BeginChild("ScrollableList", ImVec2(0, 0), true)) {
+            // Iterate real indices directly, no copy
+            size_t render_count = use_filter
+                ? filtered_indices.size()
+                : g_state.decrypted_entries.size() - 1; // exclude [0]
+
+            for (size_t i = 0; i < render_count; ++i) {
+                size_t real_idx = use_filter
+                    ? filtered_indices[i]
+                    : i + 1; // offset by 1 to skip validation entry
+
+                auto& entry = g_state.decrypted_entries[real_idx];
+                bool isSelected = (g_state.selected_entry_timestamp == entry.timestamp);
+
+                std::string selectableId = entry.title + "##" + std::to_string(real_idx);
+
+                ImGui::BeginGroup();
+
+                if (ImGui::Selectable(
+                        selectableId.c_str(),
+                        isSelected,
+                        ImGuiSelectableFlags_AllowOverlap,
+                        ImVec2(0, 60)))
+                {
+                    g_state.selected_entry_timestamp = entry.timestamp;
+
                     std::memset(g_state.titleBuf, 0, sizeof(g_state.titleBuf));
                     std::strncpy(g_state.titleBuf, entry.title.c_str(), sizeof(g_state.titleBuf) - 1);
-                    
+
                     std::memset(g_state.contentBuf, 0, sizeof(g_state.contentBuf));
                     std::strncpy(g_state.contentBuf, entry.content.c_str(), sizeof(g_state.contentBuf) - 1);
+
+                    // Reset state before leaving
+                    CryptoHelper::secure_zero_memory(searchBuffer, sizeof(searchBuffer));
+                    filtered_indices.clear();
+                    search_active = false;
+                    day = month = year = 0;
+
+                    g_state.currentPage = PageEnum::VIEW_ENTRY;
                 }
 
-                ImGui::SameLine();
-                float posX = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - 150;
-                ImGui::SetCursorPosX(posX);
-                auto tp_ms = std::chrono::time_point_cast<std::chrono::milliseconds>(
-                std::chrono::system_clock::time_point{std::chrono::milliseconds{entry.timestamp}}
-                );
+                {
+                    auto tp_ms = std::chrono::time_point_cast<std::chrono::milliseconds>(
+                        std::chrono::system_clock::time_point{std::chrono::milliseconds{entry.timestamp}}
+                    );
+                    auto local_tp = std::chrono::current_zone()->to_local(tp_ms);
+                    std::string full_date = std::format("{:%d/%m/%Y, %H:%M:%S}", local_tp);
 
-                auto local_tp = std::chrono::current_zone()->to_local(tp_ms);
-                std::string full_date = std::format("{:%d/%m/%Y, %H:%M:%S}", local_tp);
+                    float dateWidth = ImGui::CalcTextSize(full_date.c_str()).x;
+                    float posX = ImGui::GetWindowWidth() - dateWidth - ImGui::GetStyle().ScrollbarSize - ImGui::GetStyle().WindowPadding.x;
 
-                ImGui::TextDisabled("%s", full_date.c_str());
+                    ImVec2 savedCursor = ImGui::GetCursorPos();
+                    ImGui::SetCursorPos(ImVec2(posX, savedCursor.y - 60));
+                    ImGui::TextDisabled("%s", full_date.c_str());
+                    ImGui::SetCursorPos(savedCursor);
+                }
 
-                // Mostrar uma prévia do conteúdo (opcional)
                 ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.7f, 0.7f, 0.7f, 1.0f));
-                ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 35); // Ajusta para escrever dentro do selectable
-                ImGui::TextWrapped("  %.50s...", entry.content.c_str()); 
+                ImGui::TextWrapped("  %.50s...", entry.content.c_str());
                 ImGui::PopStyleColor();
+
+                ImGui::EndGroup();
 
                 ImGui::Spacing();
                 ImGui::Separator();
             }
         }
-        
+
         ImGui::EndChild();
     }
 
