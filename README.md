@@ -20,6 +20,7 @@ Um diário local e criptografado para Windows. As entradas são protegidas com c
 - **Bloqueio automático** — o diário é bloqueado automaticamente após 60 segundos de inatividade ou quando a sessão é trancada
 - **Gerenciamento seguro de memória** — buffers sensíveis são zerados após o uso e bloqueados na memória para evitar a troca para disco
 - **Busca de entradas** — permite pesquisar entradas por título ou data
+- **Proteção contra capturas e gravações de tela** — garante proteção contra prints ou compartilhamentos de tela(Discord, Zoom, etc) via WDA_EXCLUDEFROMCAPTURE
 - **Interface imediata** — construída com [Dear ImGui](https://github.com/ocornut/imgui) + OpenGL/GLFW, sem dependências de frameworks de GUI pesados
 
 ## Download
