@@ -6,7 +6,10 @@
 #include <vector>
 #include <string>
 #include <cstring>
+#include <chrono>
 #include <optional>
+#define DIARY_ENTRIES_START 32
+#define DIARY_ENTRY_HEADER_SIZE 52
 
 namespace Diary {
     struct DiaryEntry {
@@ -14,6 +17,7 @@ namespace Diary {
         std::string content;
         std::vector<uint8_t> serialized;
         size_t starts_at;
+        uint64_t timestamp;
     };
 
     void to_bytes_le(uint64_t val, uint8_t* arr) {
@@ -38,13 +42,34 @@ namespace Diary {
            ((uint64_t)arr[7] << 56);
     }
 
-    DiaryEntry add_entry(const std::string title, const std::string content, const std::vector<uint8_t>& plain_key) {
+    void to_bytes_le_u32(uint32_t val, uint8_t* arr) {
+        arr[0] = (uint8_t)(val & 0xFF);
+        arr[1] = (uint8_t)((val >> 8) & 0xFF);
+        arr[2] = (uint8_t)((uint32_t)val >> 16 & 0xFF);
+        arr[3] = (uint8_t)((uint32_t)val >> 24 & 0xFF);
+    }
+
+    uint32_t from_bytes_le_u32(uint8_t* arr) {
+        return  (uint32_t)arr[0]        |
+            ((uint32_t)arr[1] << 8)  |
+            ((uint32_t)arr[2] << 16) |
+            ((uint32_t)arr[3] << 24);
+    }
+
+    DiaryEntry add_entry(const std::string& title, const std::string& content, const std::vector<uint8_t>& plain_key, uint64_t timestamp_=0) {
         DiaryEntry new_entry;
         new_entry.title = title;
         new_entry.content = content;
         uint32_t nonce[3];
         uint8_t tag[16];
         CryptoHelper::gen_secure_random_bytes((uint8_t*)nonce, 12);
+
+        uint8_t timestamp[8];
+        auto duration = std::chrono::system_clock::now().time_since_epoch();
+        uint64_t millis = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(duration).count());
+        new_entry.timestamp = (timestamp_ == 0) ? millis : timestamp_;
+
+        to_bytes_le(millis, timestamp);
 
         // 1. Prepara os dados para criptografia (Título + Conteúdo)
         std::string entry_data = title + content;
@@ -54,20 +79,59 @@ namespace Diary {
         CHACHA20_POLY1305::encrypt(
             (uint32_t*) plain_key.data(), (uint32_t*) nonce,
             ciphertext.data(), ciphertext.size(),
-            nullptr, 0,
+            timestamp, 8,
             ciphertext.data(), tag
         );
 
         // 3. Monta o pacote final (Tag[16] + Nonce[12] + TitleLen[8] + ContentLen[8] + Ciphertext[N])
         std::vector<uint8_t> final_entry;
-        final_entry.resize(44 + ciphertext.size());
+        final_entry.resize(DIARY_ENTRY_HEADER_SIZE + ciphertext.size());
 
         uint8_t* p = final_entry.data();
         std::memcpy(p,      tag, 16);
         std::memcpy(p + 16, nonce, 12);
         to_bytes_le((uint64_t)title.size(), p + 28);
         to_bytes_le((uint64_t)content.size(), p + 36);
-        std::memcpy(p + 44, ciphertext.data(), ciphertext.size());
+        to_bytes_le(millis, p + 44);
+        std::memcpy(p + DIARY_ENTRY_HEADER_SIZE, ciphertext.data(), ciphertext.size());
+
+        new_entry.serialized = std::move(final_entry);
+
+        return new_entry;
+    }
+
+    DiaryEntry random_entry(const std::vector<uint8_t>& plain_key) {
+        DiaryEntry new_entry;
+        uint32_t nonce[3];
+        uint8_t tag[16];
+        CryptoHelper::gen_secure_random_bytes((uint8_t*)nonce, 12);
+
+        uint8_t ciphertext_len;
+        CryptoHelper::gen_secure_random_bytes(&ciphertext_len, 1);
+
+        std::vector<uint8_t> ciphertext(ciphertext_len, 0);
+        CryptoHelper::gen_secure_random_bytes(ciphertext.data(), ciphertext_len);
+
+        uint8_t timestamp[8];
+        CryptoHelper::gen_secure_random_bytes(timestamp, 8);
+
+        CHACHA20_POLY1305::encrypt(
+            (uint32_t*) plain_key.data(), (uint32_t*) nonce,
+            ciphertext.data(), ciphertext.size(),
+            timestamp, 8,
+            ciphertext.data(), tag
+        );
+
+        std::vector<uint8_t> final_entry;
+        final_entry.resize(DIARY_ENTRY_HEADER_SIZE + ciphertext.size());
+
+        uint8_t* p = final_entry.data();
+        std::memcpy(p,      tag, 16);
+        std::memcpy(p + 16, nonce, 12);
+        to_bytes_le(16, p + 28);
+        to_bytes_le(16, p + 36);
+        std::memcpy(p + 44, timestamp, 8);
+        std::memcpy(p + DIARY_ENTRY_HEADER_SIZE, ciphertext.data(), ciphertext.size());
 
         new_entry.serialized = std::move(final_entry);
 
@@ -79,24 +143,27 @@ namespace Diary {
         const std::vector<uint8_t>& plain_key
     ) {
         // Getting tag+nonce+title len+content len
-        std::vector<uint8_t> test_entry_data = read_file_range(diary_path, 16, 44);
+        std::vector<uint8_t> test_entry_data = read_file_range(diary_path, DIARY_ENTRIES_START, DIARY_ENTRY_HEADER_SIZE);
 
         uint8_t tag[16];
         uint8_t nonce[12];
         uint64_t title_len = from_bytes_le(test_entry_data.data()+28);
         uint64_t content_len = from_bytes_le(test_entry_data.data()+36);
+        
+        uint8_t aad_timestamp[8];
+        to_bytes_le(from_bytes_le(test_entry_data.data()+44), aad_timestamp);
 
         std::memcpy(tag, test_entry_data.data(), 16);
         std::memcpy(nonce, test_entry_data.data()+16, 12);
 
         uint64_t total_cipher_len = title_len + content_len;
-        std::vector<uint8_t> ciphertext = read_file_range(diary_path, 60, total_cipher_len);
+        std::vector<uint8_t> ciphertext = read_file_range(diary_path, DIARY_ENTRIES_START+DIARY_ENTRY_HEADER_SIZE, total_cipher_len);
 
         try {
             CHACHA20_POLY1305::decrypt(
                 (uint32_t*) plain_key.data(), (uint32_t*) nonce,
                 ciphertext.data(), ciphertext.size(),
-                nullptr, 0,
+                aad_timestamp, 8,
                 tag, ciphertext.data()
             );
 
@@ -109,31 +176,36 @@ namespace Diary {
     std::optional<DiaryEntry> read_next_entry(uint8_t*& ptr, size_t& at, const std::vector<uint8_t>& plain_key) {
         uint8_t tag[16];
         uint8_t nonce[12];
+        uint8_t timestamp_bytes[8];
         uint64_t title_len = from_bytes_le(ptr+28);
         uint64_t content_len = from_bytes_le(ptr+36);
+        uint64_t timestamp = from_bytes_le(ptr+44);
+
+        to_bytes_le(timestamp, timestamp_bytes);
 
         std::memcpy(tag, ptr, 16);
         std::memcpy(nonce, ptr+16, 12);
 
         uint64_t total_cipher_len = title_len + content_len;
         std::vector<uint8_t> ciphertext(total_cipher_len);
-        std::memcpy(ciphertext.data(), ptr+44, total_cipher_len);
+        std::memcpy(ciphertext.data(), ptr+DIARY_ENTRY_HEADER_SIZE, total_cipher_len);
 
         try {
             CHACHA20_POLY1305::decrypt(
                 (uint32_t*) plain_key.data(), (uint32_t*) nonce, 
                 ciphertext.data(), ciphertext.size(),
-                nullptr, 0,
+                timestamp_bytes, 8,
                 tag, ciphertext.data()
             );
 
             DiaryEntry new_entry;
             new_entry.title = std::string(ciphertext.begin(), ciphertext.begin() + title_len);
             new_entry.content = std::string(ciphertext.begin() + title_len, ciphertext.end());
+            new_entry.timestamp = timestamp;
 
             new_entry.starts_at = at;
             
-            size_t total_entry_len = 44 + total_cipher_len;
+            size_t total_entry_len = DIARY_ENTRY_HEADER_SIZE + total_cipher_len;
             new_entry.serialized.assign(ptr, ptr + total_entry_len);
 
             ptr += total_entry_len;
@@ -142,8 +214,45 @@ namespace Diary {
         } catch (...) {
             return std::nullopt;
         }
-
     }
+
+    std::optional<std::string> test_second_entry(const fs::path& diary_path, const std::vector<uint8_t>& plain_key) {
+        std::vector<uint8_t> first_header = read_file_range(diary_path, DIARY_ENTRIES_START, DIARY_ENTRY_HEADER_SIZE);
+        if (first_header.size() < DIARY_ENTRY_HEADER_SIZE) return std::nullopt;
+
+        uint64_t v_total_len = from_bytes_le(first_header.data() + 28) + from_bytes_le(first_header.data() + 36);
+        size_t second_entry_offset = DIARY_ENTRIES_START + DIARY_ENTRY_HEADER_SIZE + v_total_len;
+
+        std::vector<uint8_t> target_header = read_file_range(diary_path, second_entry_offset, DIARY_ENTRY_HEADER_SIZE);
+        if (target_header.size() < DIARY_ENTRY_HEADER_SIZE) return std::nullopt;
+
+        uint8_t tag[16], nonce[12], aad_timestamp[8];
+        uint64_t title_len = from_bytes_le(target_header.data() + 28);
+        uint64_t content_len = from_bytes_le(target_header.data() + 36);
+        to_bytes_le(from_bytes_le(target_header.data() + 44), aad_timestamp);
+
+        std::memcpy(tag, target_header.data(), 16);
+        std::memcpy(nonce, target_header.data() + 16, 12);
+
+        uint64_t cipher_len = title_len + content_len;
+        std::vector<uint8_t> ciphertext = read_file_range(diary_path, second_entry_offset + DIARY_ENTRY_HEADER_SIZE, cipher_len);
+        if (ciphertext.size() < cipher_len) return std::nullopt;
+
+        try {
+            CHACHA20_POLY1305::decrypt(
+                (uint32_t*)plain_key.data(), (uint32_t*)nonce,
+                ciphertext.data(), ciphertext.size(),
+                aad_timestamp, 8,
+                tag, ciphertext.data()
+            );
+
+            // O conteúdo começa após o título no vetor descriptografado
+            return std::string(ciphertext.begin() + title_len, ciphertext.end());
+        } catch (...) {
+            return std::nullopt;
+        }
+    }
+
 
     std::vector<DiaryEntry> map_all_entries(
         const fs::path& diary_path,
@@ -152,7 +261,7 @@ namespace Diary {
         size_t file_size = get_file_size(diary_path);
         if (file_size <= 16) return {};
 
-        std::vector<uint8_t> data = read_file_range(diary_path, 16, file_size - 16);
+        std::vector<uint8_t> data = read_file_range(diary_path, DIARY_ENTRIES_START, file_size - DIARY_ENTRIES_START);
         
         std::vector<DiaryEntry> entries;
         uint8_t* ptr = data.data();
@@ -160,7 +269,7 @@ namespace Diary {
         size_t total_buffer_size = data.size();
 
         while (at < total_buffer_size) {
-            if (total_buffer_size - at < 44) break;
+            if (total_buffer_size - at < DIARY_ENTRY_HEADER_SIZE) break;
 
             auto entry = read_next_entry(ptr, at, plain_key);
             
@@ -175,6 +284,8 @@ namespace Diary {
     }
 
     void save_diary_entries(const fs::path& diary_path, const std::vector<DiaryEntry>& entries) {
+        if(entries.empty()) return;
+
         size_t total_entry_size = 0;
         for (const auto& entry : entries) {
             total_entry_size += entry.serialized.size();
@@ -188,7 +299,7 @@ namespace Diary {
             data_ptr += entry.serialized.size();
         }
 
-        truncate_file(diary_path, total_entry_size+16);
-        rewrite_binary_section(diary_path, encrypted_data.data(), encrypted_data.size(), 16);
+        truncate_file(diary_path, DIARY_ENTRIES_START);
+        rewrite_binary_section(diary_path, encrypted_data.data(), encrypted_data.size(), DIARY_ENTRIES_START);
     }
 }

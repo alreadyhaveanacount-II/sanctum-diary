@@ -8,15 +8,83 @@
 #include "utils/file_ops.hpp"
 #include "utils/diary_helper.hpp"
 #include <cstddef>
+#include <format>
 #include <cstdint>
 #include <iostream>
 #include <vector>
 
 namespace Pages {
     void entry_select() {
-        ImGui::Begin("Selecione uma entrada", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
+        static char searchBuffer[100] = {};
+        static std::vector<size_t> filtered_indices;
+        static bool search_active = false;
+        static int day = 0, month = 0, year = 0;
+
+        ImGui::Begin("Selecione uma entrada", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoBringToFrontOnFocus);
+
+        ImGui::Text("Pesquisar por texto em título");
+        ImGui::InputText("##search", searchBuffer, sizeof(searchBuffer));
+
+        ImGui::PushItemWidth(40);
+        ImGui::InputInt("##day", &day, 0, 0);
+        ImGui::SameLine();
+        ImGui::Text("/");
+        ImGui::SameLine();
+        ImGui::InputInt("##month", &month, 0, 0);
+        ImGui::SameLine();
+        ImGui::Text("/");
+        ImGui::SameLine();
+        ImGui::PushItemWidth(60);
+        ImGui::InputInt("##year", &year, 0, 0);
+        ImGui::PopItemWidth();
+        ImGui::SameLine();
+        ImGui::Text("(DD/MM/YYYY)");
+
+        if (ImGui::Button("Pesquisar", ImVec2(-FLT_MIN, 20))) {
+            filtered_indices.clear();
+            search_active = true;
+
+            std::string searchStr = searchBuffer;
+            std::transform(searchStr.begin(), searchStr.end(), searchStr.begin(), ::tolower);
+
+            for (size_t i = 1; i < g_state.decrypted_entries.size(); ++i) {
+                auto& entry = g_state.decrypted_entries[i];
+                bool match = true;
+
+                if (!searchStr.empty()) {
+                    std::string titleLower = entry.title;
+                    std::transform(titleLower.begin(), titleLower.end(), titleLower.begin(), ::tolower);
+                    if (titleLower.find(searchStr) == std::string::npos)
+                        match = false;
+                }
+
+                if (match && (day != 0 || month != 0 || year != 0)) {
+                    auto tp = std::chrono::system_clock::time_point{
+                        std::chrono::milliseconds{entry.timestamp}
+                    };
+                    auto lt = std::chrono::current_zone()->to_local(tp);
+                    auto days_floor = std::chrono::floor<std::chrono::days>(lt);
+                    std::chrono::year_month_day ymd{days_floor};
+
+                    if (day   != 0 && (int)(unsigned)ymd.day()   != day)   match = false;
+                    if (month != 0 && (int)(unsigned)ymd.month() != month) match = false;
+                    if (year  != 0 && (int)ymd.year()            != year)  match = false;
+                }
+
+                if (match)
+                    filtered_indices.push_back(i); // stores real index into decrypted_entries
+            }
+        }
+
+        ImGui::Separator();
+        ImGui::Spacing();
 
         if (ImGui::Button("+ Nova Entrada", ImVec2(-FLT_MIN, 45))) {
+            CryptoHelper::secure_zero_memory(searchBuffer, sizeof(searchBuffer));
+            filtered_indices.clear();
+            search_active = false;
+            day = month = year = 0;
+
             g_state.currentPage = PageEnum::CREATE_ENTRY;
         }
 
@@ -24,62 +92,112 @@ namespace Pages {
         ImGui::Spacing();
 
         if (ImGui::BeginChild("ScrollableList", ImVec2(0, 0), true)) {
-            for (size_t i = 1; i < g_state.decrypted_entries.size(); ++i) {
-                auto& entry = g_state.decrypted_entries[i];
-                
-                // Criamos um ID único combinando o índice e o título
-                std::string id = entry.title + "##" + std::to_string(i);
+            size_t render_count = search_active
+                ? filtered_indices.size()
+                : g_state.decrypted_entries.size() - 1;
 
-                // Bloco vertical (Selectable com altura fixa)
-                if (ImGui::Selectable(id.c_str(), g_state.selected_entry_index == i, 0, ImVec2(0, 60))) {
-                    g_state.selected_entry_index = i;
-                    g_state.currentPage = PageEnum::VIEW_ENTRY;
-                    auto& entry = g_state.decrypted_entries[i];
-    
-                    std::memset(g_state.titleBuf, 0, sizeof(g_state.titleBuf));
+            for (size_t i = 0; i < render_count; ++i) {
+                // real_idx always points into decrypted_entries, regardless of filter state
+                size_t real_idx = search_active ? filtered_indices[i] : i + 1;
+
+                auto& entry = g_state.decrypted_entries[real_idx];
+                bool isSelected = (g_state.selected_entry_index == real_idx);
+
+                std::string selectableId = entry.title + "##" + std::to_string(real_idx);
+
+                ImGui::BeginGroup();
+
+                if (ImGui::Selectable(
+                        selectableId.c_str(),
+                        isSelected,
+                        ImGuiSelectableFlags_AllowOverlap,
+                        ImVec2(0, 60)))
+                {
+                    g_state.selected_entry_index = real_idx; // always a decrypted_entries index
+
+                    CryptoHelper::secure_zero_memory(g_state.titleBuf, sizeof(g_state.titleBuf));
                     std::strncpy(g_state.titleBuf, entry.title.c_str(), sizeof(g_state.titleBuf) - 1);
-                    
-                    std::memset(g_state.contentBuf, 0, sizeof(g_state.contentBuf));
+
+                    CryptoHelper::secure_zero_memory(g_state.contentBuf, sizeof(g_state.contentBuf));
                     std::strncpy(g_state.contentBuf, entry.content.c_str(), sizeof(g_state.contentBuf) - 1);
+
+                    CryptoHelper::secure_zero_memory(searchBuffer, sizeof(searchBuffer));
+                    filtered_indices.clear();
+                    search_active = false;
+                    day = month = year = 0;
+
+                    g_state.currentPage = PageEnum::VIEW_ENTRY;
                 }
 
-                // Mostrar uma prévia do conteúdo (opcional)
+                {
+                    auto tp_ms = std::chrono::time_point_cast<std::chrono::milliseconds>(
+                        std::chrono::system_clock::time_point{std::chrono::milliseconds{entry.timestamp}}
+                    );
+                    auto local_tp = std::chrono::current_zone()->to_local(tp_ms);
+                    std::string full_date = std::format("{:%d/%m/%Y, %H:%M:%S}", local_tp);
+
+                    float dateWidth = ImGui::CalcTextSize(full_date.c_str()).x;
+                    float posX = ImGui::GetWindowWidth() - dateWidth - ImGui::GetStyle().ScrollbarSize - ImGui::GetStyle().WindowPadding.x;
+
+                    ImVec2 savedCursor = ImGui::GetCursorPos();
+                    ImGui::SetCursorPos(ImVec2(posX, savedCursor.y - 60));
+                    ImGui::TextDisabled("%s", full_date.c_str());
+                    ImGui::SetCursorPos(savedCursor);
+                }
+
                 ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.7f, 0.7f, 0.7f, 1.0f));
-                ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 35); // Ajusta para escrever dentro do selectable
-                ImGui::TextWrapped("  %.50s...", entry.content.c_str()); 
+                ImGui::TextWrapped("  %.50s...", entry.content.c_str());
                 ImGui::PopStyleColor();
+
+                ImGui::EndGroup();
 
                 ImGui::Spacing();
                 ImGui::Separator();
             }
         }
-        
+
         ImGui::EndChild();
     }
 
     void view_entry() {
         const auto& entry = g_state.decrypted_entries[g_state.selected_entry_index];
-
-        ImGui::SetNextWindowSize(ImVec2(500, 450), ImGuiCond_FirstUseEver);
         
         // O ID "###view" garante que a janela seja tratada como a mesma pelo ImGui
         std::string title = entry.title + "###view";
 
         if (ImGui::Begin(title.c_str())) {
-            ImGui::InputText("Título", g_state.titleBuf, sizeof(g_state.titleBuf));
+            auto tp_ms = std::chrono::time_point_cast<std::chrono::milliseconds>(
+                std::chrono::system_clock::time_point{std::chrono::milliseconds{entry.timestamp}}
+            );
+
+            auto local_tp = std::chrono::current_zone()->to_local(tp_ms);
+            std::string full_date = std::format("{:%d/%m/%Y, %H:%M:%S}", local_tp);
+
+            ImGui::Text("Data: %s", full_date.c_str());
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            ImGui::Text("Título");
+            ImGui::PushItemWidth(-FLT_MIN);
+            ImGui::InputText("##title", g_state.titleBuf, sizeof(g_state.titleBuf));
+            ImGui::PopItemWidth();
+            ImGui::Separator();
             
             ImGui::Separator();
             ImGui::Spacing();
 
             ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.4f, 1.0f), "Conteúdo:");
-            
-            // Exibe o conteúdo em modo leitura
-            ImGui::InputTextMultiline("##content", g_state.contentBuf, sizeof(g_state.contentBuf));
+
+            float altura_disponivel = ImGui::GetContentRegionAvail().y - 120.0f;
+
+            ImGui::InputTextMultiline("##content", g_state.contentBuf, sizeof(g_state.contentBuf), ImVec2(-FLT_MIN, altura_disponivel), ImGuiInputTextFlags_AllowTabInput);
 
             // Botão para fechar a visualização
             if (ImGui::Button("Fechar Visualização", ImVec2(-FLT_MIN, 30))) {
                 g_state.selected_entry_index = -1;
                 g_state.currentPage = PageEnum::ENTRY_SELECT;
+                CryptoHelper::secure_zero_memory(g_state.titleBuf, sizeof(g_state.titleBuf));
+                CryptoHelper::secure_zero_memory(g_state.contentBuf, sizeof(g_state.contentBuf));
             }
 
             if (ImGui::Button("Apagar", ImVec2(-FLT_MIN, 30))) {
@@ -94,7 +212,7 @@ namespace Pages {
                 if (strlen(g_state.titleBuf) > 0 && strlen(g_state.contentBuf) > 0) {
                     Diary::DiaryEntry new_entry = Diary::add_entry(
                         std::string(g_state.titleBuf), std::string(g_state.contentBuf),
-                        g_state.keydata
+                        g_state.keydata, g_state.decrypted_entries[g_state.selected_entry_index].timestamp
                     );
 
                     g_state.decrypted_entries[g_state.selected_entry_index] = new_entry;
@@ -110,7 +228,7 @@ namespace Pages {
     }
 
     void create_entry() {
-        ImGui::Begin("Nova Entrada", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
+        ImGui::Begin("Nova Entrada", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoBringToFrontOnFocus);
 
         ImGui::Text("Título"); // Rótulo no topo
         ImGui::SetNextItemWidth(-FLT_MIN);
@@ -118,7 +236,8 @@ namespace Pages {
 
         ImGui::Spacing();
         ImGui::Text("Conteúdo");
-        ImGui::InputTextMultiline("##content", g_state.contentBuf, sizeof(g_state.contentBuf), ImVec2(-FLT_MIN, -50));
+        
+        ImGui::InputTextMultiline("##content", g_state.contentBuf, sizeof(g_state.contentBuf), ImVec2(-FLT_MIN, -85), ImGuiInputTextFlags_AllowTabInput); 
 
         ImGui::Spacing();
         if (ImGui::Button("Salvar Entrada", ImVec2(-FLT_MIN, 40))) {
@@ -140,87 +259,135 @@ namespace Pages {
                 g_state.currentPage = PageEnum::ENTRY_SELECT;
             }
         }
+
+        if (ImGui::Button("Fechar Visualização", ImVec2(-FLT_MIN, 30))) {
+            g_state.currentPage = PageEnum::ENTRY_SELECT;
+            CryptoHelper::secure_zero_memory(g_state.titleBuf, sizeof(g_state.titleBuf));
+            CryptoHelper::secure_zero_memory(g_state.contentBuf, sizeof(g_state.contentBuf));
+        }
     }
 
     void open_diary() {
-        static char pathBuffer[256] = "";
+        ImGui::Begin("Abrir banco", nullptr, 
+            ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoBringToFrontOnFocus);
 
-        ImGui::Begin("Abrir banco", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
+        // 2. Configurações de tamanho
+        ImVec2 button_size = ImVec2(300, 50);
+        float window_width = ImGui::GetWindowSize().x;
+        float window_height = ImGui::GetWindowSize().y;
+        
+        // Calcula o bloco central (2 botões + espaçamento)
+        float total_height = (button_size.y * 2) + ImGui::GetStyle().ItemSpacing.y;
+        float start_x = (window_width - button_size.x) * 0.5f;
+        float start_y = (window_height - total_height) * 0.5f;
 
-        // Rótulo e Input de Texto para o Caminho
-        ImGui::Text("Caminho do Diario (sem extensao):");
-        ImGui::InputText("##path", pathBuffer, IM_ARRAYSIZE(pathBuffer));
+        // 4. Botão: Abrir Existente
+        ImGui::SetCursorPos(ImVec2(start_x, start_y));
+        if (ImGui::Button("ABRIR EXISTENTE", button_size)) {
+            std::string path = CryptoHelper::OpenFileDialog((HWND)g_state.hwnd);
+            if (!path.empty()) {
+                fs::path file_path(path);
+                // .sdde verificado pelo diálogo, mas garantimos aqui
+                if (file_path.extension() != ".sdde") file_path += ".sdde";
 
-        ImGui::Spacing();
-        ImGui::Separator();
-        ImGui::Spacing();
-
-        // Botões Lado a Lado
-        if (ImGui::Button("Abrir Existente")) {
-            fs::path file_path(pathBuffer);
-            if (file_path.extension() != ".sdde") file_path += ".sdde";
-
-            if(!fs::exists(file_path)) {
-                printf("Diario nao existente");
-            } else {
-                g_state.curr_diary = file_path;
-                g_state.is_diary_new = false;
-                g_state.currentPage = PageEnum::TYPE_PWD;
+                if (fs::exists(file_path)) {
+                    g_state.curr_diary = file_path;
+                    g_state.is_diary_new = false;
+                    g_state.currentPage = PageEnum::TYPE_PWD;
+                }
             }
         }
 
-        ImGui::SameLine(); // Mantém o próximo item na mesma linha
+        // 5. Botão: Criar Novo
+        ImGui::SetCursorPosX(start_x);
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.12f, 0.35f, 0.60f, 1.0f)); // Azul Sanctum
+        if (ImGui::Button("CRIAR NOVO DIÁRIO", button_size)) {
+            std::string path = CryptoHelper::SaveFileDialog((HWND)g_state.hwnd);
+            if (!path.empty()) {
+                fs::path file_path(path);
+                if (file_path.extension() != ".sdde") file_path += ".sdde";
 
-        if (ImGui::Button("Criar Novo")) {
-            fs::path file_path(pathBuffer);
-
-            if (file_path.extension() != ".sdde") file_path += ".sdde";
-
-            uint8_t initial_data[16];
-            CryptoHelper::gen_secure_random_bytes(initial_data, 16);
-
-            if(fs::exists(file_path)) {
-                printf("Diario ja existe");
-            } else {
+                uint8_t initial_data[16];
+                CryptoHelper::gen_secure_random_bytes(initial_data, 16);
+                
                 save_binary(file_path, initial_data, 16);
                 g_state.curr_diary = file_path;
                 g_state.is_diary_new = true;
                 g_state.currentPage = PageEnum::TYPE_PWD;
             }
         }
+        ImGui::PopStyleColor();
     }
 
     void handle_password() {
-        ImGui::Begin("Senha do Diário", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
+        static uint32_t N_exponent = 20; 
+        static uint32_t r = 8, p = 1, dkLen = 32;
 
-        ImGui::Text("Digite sua senha:");
-        ImGui::InputText("##pwd", g_state.pwdBuffer, IM_ARRAYSIZE(g_state.pwdBuffer), ImGuiInputTextFlags_Password | ImGuiInputTextFlags_EnterReturnsTrue);
+        // Estilo mais "limpo"
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(20, 20));
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 6));
 
-        ImGui::Spacing();
+        ImGui::Begin("Senha do Diário", nullptr, 
+            ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove);
+
+        // Título e Subtítulo
+        ImGui::TextDisabled("SISTEMA DE CRIPTOGRAFIA");
+        ImGui::Text("Acesso ao Diário");
         ImGui::Separator();
         ImGui::Spacing();
 
-        if (ImGui::Button("Entrar")) {
-            // 1. Scrypt parameters
-            uint64_t N = 131072; uint32_t r = 8, p = 1, dkLen = 32;
+        // 2. Campo de Senha em destaque
+        ImGui::Text("Digite sua senha mestre:");
+        ImGui::SetNextItemWidth(-1);
+        bool enterPressed = ImGui::InputText("##pwd", g_state.pwdBuffer, IM_ARRAYSIZE(g_state.pwdBuffer), 
+                                            ImGuiInputTextFlags_Password | ImGuiInputTextFlags_EnterReturnsTrue);
+
+        ImGui::Spacing();
+
+        // 3. Botão de Entrar (Estilizado)
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.26f, 0.59f, 0.98f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.35f, 0.65f, 1.0f, 1.0f));
+        if (ImGui::Button("DESBLOQUEAR DIÁRIO", ImVec2(-1, 45)) || enterPressed) {
+            uint64_t N = 1 << N_exponent;
 
             // 2. Getting salt
             std::vector<uint8_t> salt = read_file_range(g_state.curr_diary, 0, 16);
 
             // Deriving key
             std::vector<uint8_t> password(g_state.pwdBuffer, g_state.pwdBuffer + strlen(g_state.pwdBuffer));
+
+            if(!g_state.is_diary_new) {
+                std::vector<uint8_t> nrp = read_file_range(g_state.curr_diary, 16, 16);
+                N = Diary::from_bytes_le(nrp.data());
+                r = Diary::from_bytes_le_u32(nrp.data()+8);
+                p = Diary::from_bytes_le_u32(nrp.data()+12);
+            }
+
             Scrypt scryptengine(password, salt, N, r, p, dkLen);
             std::vector<uint8_t> derivated = scryptengine.kdf();
 
             bool all_went_right = true;
 
             if(g_state.is_diary_new) {
-                Diary::DiaryEntry test_entry = Diary::add_entry("TEST ENTRY", "IS KEY VALID", derivated);
+                Diary::DiaryEntry test_entry = Diary::random_entry(derivated);
+
+                uint8_t params[16];
+                Diary::to_bytes_le(N, params);
+                Diary::to_bytes_le_u32(r, params+8);
+                Diary::to_bytes_le_u32(p, params+12);
+
+                append_binary(g_state.curr_diary, params, 16);
                 append_binary(g_state.curr_diary, test_entry.serialized.data(), test_entry.serialized.size());
             } else {
                 if(!Diary::test_key(g_state.curr_diary, derivated)) {
                     all_went_right = false;
                     std::cout << "Incorrect key\n";
+
+                    auto dummy_test = Diary::test_second_entry(g_state.curr_diary, derivated);
+                    if(dummy_test) {
+                        g_state.curr_diary = *dummy_test;
+                        CryptoHelper::secure_zero_memory(g_state.pwdBuffer, 256);
+                    }
                 }
             }
 
@@ -240,10 +407,53 @@ namespace Pages {
             CryptoHelper::secure_zero_memory(derivated.data(), derivated.size());
             CryptoHelper::secure_zero_memory(g_state.pwdBuffer, 256);
         }
+        ImGui::PopStyleColor(2);
+
+        // 4. Configurações Avançadas (Recolhível)
+        ImGui::Spacing();
+        ImGui::Separator();
+        if (ImGui::TreeNode("Parâmetros Scrypt (Avançado)")) {
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4, 4));
+            
+            if (!g_state.is_diary_new) {
+                ImGui::BeginDisabled();
+                ImGui::TextWrapped("Nota: Parâmetros lidos do arquivo existente.");
+            }
+
+            uint32_t min_v = 1, max_v = 20;   
+            ImGui::Text("N exponent (2^N):");
+            ImGui::SetNextItemWidth(-1);
+            ImGui::SliderScalar("##N", ImGuiDataType_U32, &N_exponent, &min_v, &max_v, "%u");
+
+            ImGui::Columns(2, "params", false);
+            ImGui::Text("Parâmetro r:");
+            ImGui::SetNextItemWidth(-1);
+            if(ImGui::InputScalar("##r", ImGuiDataType_U32, &r)) {
+                if ((uint64_t)r * (uint64_t)p > (1ULL << 30)) r = (uint32_t)((1ULL << 30) / (uint64_t)p);
+            }
+
+            ImGui::NextColumn();
+            ImGui::Text("Parâmetro p:");
+            ImGui::SetNextItemWidth(-1);
+            if(ImGui::InputScalar("##p", ImGuiDataType_U32, &p)) {
+                if ((uint64_t)r * (uint64_t)p > (1ULL << 30)) p = (uint32_t)((1ULL << 30) / (uint64_t)r);
+            }
+            ImGui::Columns(1);
+
+            if (!g_state.is_diary_new) ImGui::EndDisabled();
+
+            ImGui::PopStyleVar();
+            ImGui::TreePop();
+        }
+
+        ImGui::PopStyleVar(2);
     }
 
     void lock_sensitive_data() {
-        Diary::save_diary_entries(g_state.curr_diary, g_state.decrypted_entries);
+        if(g_state.is_diary_decrypted) {
+            g_state.decrypted_entries[0] = Diary::random_entry(g_state.keydata);
+            Diary::save_diary_entries(g_state.curr_diary, g_state.decrypted_entries);
+        }
 
         for (auto& entry : g_state.decrypted_entries) {
             std::fill(entry.title.begin(), entry.title.end(), 0);
@@ -274,7 +484,10 @@ namespace Pages {
     }
 
     void cleanup() {
-        Diary::save_diary_entries(g_state.curr_diary, g_state.decrypted_entries);
+        if(g_state.is_diary_decrypted) {
+            g_state.decrypted_entries[0] = Diary::random_entry(g_state.keydata);
+            Diary::save_diary_entries(g_state.curr_diary, g_state.decrypted_entries);
+        }
 
         for (auto& entry : g_state.decrypted_entries) {
             CryptoHelper::secure_zero_memory((void*)entry.title.data(), entry.title.size());
@@ -287,9 +500,19 @@ namespace Pages {
 
         CryptoHelper::unlock_memory(g_state.decrypted_entries.data(), g_state.decrypted_entries.size() * sizeof(Diary::DiaryEntry));
         CryptoHelper::unlock_memory(g_state.keydata.data(), g_state.keydata.size());
+        
+        CryptoHelper::secure_zero_memory(g_state.titleBuf, sizeof(g_state.titleBuf));
+        CryptoHelper::secure_zero_memory(g_state.contentBuf, sizeof(g_state.contentBuf));
 
         g_state.decrypted_entries.clear();
         g_state.decrypted_entries.shrink_to_fit();
+    }
+
+    void timeout_bridge() {
+        lock_sensitive_data();
+        g_state.currentPage = PageEnum::INACTIVE;
+        CryptoHelper::secure_zero_memory(g_state.titleBuf, sizeof(g_state.titleBuf));
+        CryptoHelper::secure_zero_memory(g_state.contentBuf, sizeof(g_state.contentBuf));
     }
 
     void handle_security_timeout() {
@@ -297,27 +520,14 @@ namespace Pages {
 
         double current_time = ImGui::GetTime();
         
-        bool is_currently_focused = (GetForegroundWindow() == g_state.hwnd);
+        LASTINPUTINFO lii = { sizeof(LASTINPUTINFO) };
 
-        if (!is_currently_focused) {
-            if (g_state.was_focused) {
-                g_state.last_focused_time = current_time;
-                g_state.was_focused = false;
+        if (GetLastInputInfo(&lii)) {
+            DWORD idleTime = GetTickCount64() - lii.dwTime;
+            
+            if (idleTime > 120000 && g_state.is_diary_decrypted) { // 2 minutes
+                timeout_bridge();
             }
-
-            if (g_state.is_diary_decrypted) {
-                double seconds_inactive = current_time - g_state.last_focused_time;
-                
-                if (seconds_inactive >= 60.0) {
-                    lock_sensitive_data();
-                    g_state.currentPage = PageEnum::INACTIVE;
-                    g_state.was_focused = true; // Reseta para não travar em loop
-                    CryptoHelper::secure_zero_memory(g_state.titleBuf, sizeof(g_state.titleBuf));
-                    CryptoHelper::secure_zero_memory(g_state.contentBuf, sizeof(g_state.contentBuf));
-                }
-            }
-        } else {
-            g_state.was_focused = true;
         }
     }
 
@@ -326,7 +536,7 @@ namespace Pages {
         ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize);
         
         ImGui::Begin("LockScreen", nullptr, 
-            ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
+            ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoBringToFrontOnFocus);
 
         float window_width = ImGui::GetWindowSize().x;
         float window_height = ImGui::GetWindowSize().y;

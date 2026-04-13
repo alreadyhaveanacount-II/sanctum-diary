@@ -1,6 +1,7 @@
 #pragma once
 #include <filesystem>
 #include <windows.h>
+#include "imgui/imgui.h"
 #include "utils/diary_helper.hpp"
 namespace fs = std::filesystem;
 
@@ -12,6 +13,7 @@ struct StateMachine {
     std::wstring hello_keyname;
     std::vector<uint8_t> keydata;
     HANDLE hwnd;
+    bool dummy_mode;
     double last_focused_time;
     std::vector<Diary::DiaryEntry> decrypted_entries;
     char titleBuf[128];
@@ -19,7 +21,6 @@ struct StateMachine {
     char pwdBuffer[256];
     int selected_entry_index;
     bool is_diary_decrypted;
-    bool was_focused;
     bool is_diary_new;
 };
 

@@ -6,6 +6,7 @@
 *.obj
 *.exp
 *.ilk
+*.o
 
 # === Arquivos de Dados (Sanctum/CryptoTool) ===
 *.sdde

@@ -1,8 +1,9 @@
+#define GLFW_DLL
+#define GLFW_EXPOSE_NATIVE_WIN32
+#pragma comment(lib, "wtsapi32.lib")
 #include "include/app_pages.hpp"
 #include "include/app_state.hpp"
 #include "include/utils/crypto_helpers.hpp"
-#define GLFW_DLL
-#define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3.h>
 #include <GLFW/glfw3native.h>
 #include "include/utils/file_ops.hpp"
@@ -12,14 +13,30 @@
 #include "app_pages.hpp"
 #include "app_state.hpp"
 #include "utils/crypto_helpers.hpp"
+#include <wtsapi32.h>
 
 StateMachine g_state;
 
-int main() {
+WNDPROC g_GlfwWndProc;
+
+LRESULT CALLBACK SessionGuardCallback(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    if (msg == WM_WTSSESSION_CHANGE) {
+        if (wParam == WTS_SESSION_LOCK) {
+            if (g_state.is_diary_decrypted) {
+                Pages::timeout_bridge();
+            }
+        }
+    }
+    
+    return CallWindowProc(g_GlfwWndProc, hWnd, msg, wParam, lParam);
+}
+
+int main(int argc, char* argv[]) {
     if (!glfwInit()) return -1;
 
     const char* glsl_version = "#version 130";
-    GLFWwindow* window = glfwCreateWindow(800, 600, "CryptoTool - SHA256 & Auth", NULL, NULL);
+    glfwWindowHint(GLFW_MAXIMIZED, GLFW_TRUE);
+    GLFWwindow* window = glfwCreateWindow(800, 600, "Sanctum Private Diary", NULL, NULL);
     if (!window) { glfwTerminate(); return -1; }
     
     glfwMakeContextCurrent(window);
@@ -34,6 +51,30 @@ int main() {
     g_state.currentPage = PageEnum::OPEN_DB;
     g_state.hwnd = glfwGetWin32Window(window);
 
+    HWND win32_hwnd = (HWND)g_state.hwnd;
+
+    g_GlfwWndProc = (WNDPROC)GetWindowLongPtr(win32_hwnd, GWLP_WNDPROC);
+    SetWindowLongPtr(win32_hwnd, GWLP_WNDPROC, (LONG_PTR)SessionGuardCallback);
+
+    WTSRegisterSessionNotification(win32_hwnd, NOTIFY_FOR_THIS_SESSION);
+
+    HICON hIcon = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(101)); 
+    SetWindowDisplayAffinity(win32_hwnd, WDA_EXCLUDEFROMCAPTURE);
+
+    if (hIcon) {
+        SendMessage(win32_hwnd, WM_SETICON, ICON_BIG, (LPARAM)hIcon);
+        SendMessage(win32_hwnd, WM_SETICON, ICON_SMALL, (LPARAM)hIcon);
+    }
+
+    if (argc > 1) {
+        fs::path file_path(argv[1]);
+        if (fs::exists(file_path) && file_path.extension() == ".sdde") {
+            g_state.curr_diary = file_path;
+            g_state.is_diary_new = false;
+            g_state.currentPage = PageEnum::TYPE_PWD;
+        }
+    }
+
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
 
@@ -41,9 +82,9 @@ int main() {
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        // --- Interface do Usuário ---
-        ImGui::SetNextWindowPos(ImVec2(0, 0));
-        ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize);
+        const ImGuiViewport* viewport = ImGui::GetMainViewport();
+        ImGui::SetNextWindowPos(viewport->Pos);
+        ImGui::SetNextWindowSize(viewport->Size);
         
         switch(g_state.currentPage) {
             case PageEnum::OPEN_DB:
