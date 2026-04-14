@@ -71,12 +71,14 @@ namespace Diary {
         uint8_t tag[16];
         CryptoHelper::gen_secure_random_bytes((uint8_t*)nonce, 12);
 
-        uint8_t timestamp[8];
+        uint8_t aad[24];
         auto duration = std::chrono::system_clock::now().time_since_epoch();
         uint64_t millis = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(duration).count());
         new_entry.timestamp = (timestamp_ == 0) ? millis : timestamp_;
 
-        to_bytes_le(new_entry.timestamp, timestamp);
+        to_bytes_le(new_entry.timestamp, aad);
+        to_bytes_le(title.size(), aad+8);
+        to_bytes_le(content.size(), aad+16);
 
         // 1. Prepara os dados para criptografia (Título + Conteúdo)'
         size_t total_payload = title.size() + content.size();
@@ -88,7 +90,7 @@ namespace Diary {
         CHACHA20_POLY1305::encrypt(
             (uint32_t*) plain_key.data(), (uint32_t*) nonce,
             ciphertext.data(), ciphertext.size(),
-            timestamp, 8,
+            aad, 24,
             ciphertext.data(), tag
         );
 
@@ -109,25 +111,17 @@ namespace Diary {
         return new_entry;
     }
 
-    DiaryEntry random_entry(const std::vector<uint8_t>& plain_key) {
-        uint8_t random_title;
-        CryptoHelper::gen_secure_random_bytes(&random_title, 1);
-
-        uint8_t random_body[511];
-        CryptoHelper::gen_secure_random_bytes(random_body, 511);
-
-        return add_entry(std::string(reinterpret_cast<char*>(&random_title), 1), std::string(reinterpret_cast<char*>(random_body), 511), plain_key);
-    }
-
     std::optional<DiaryEntry> read_next_entry(uint8_t*& ptr, size_t& at, const std::vector<uint8_t>& plain_key) {
         uint8_t tag[16];
         uint8_t nonce[12];
-        uint8_t timestamp_bytes[8];
+        uint8_t aad_bytes[24];
         uint64_t title_len = from_bytes_le(ptr+28);
         uint64_t content_len = from_bytes_le(ptr+36);
         uint64_t timestamp = from_bytes_le(ptr+44);
 
-        to_bytes_le(timestamp, timestamp_bytes);
+        to_bytes_le(timestamp, aad_bytes);
+        to_bytes_le(title_len, aad_bytes+8);
+        to_bytes_le(content_len, aad_bytes+16);
 
         std::memcpy(tag, ptr, 16);
         std::memcpy(nonce, ptr+16, 12);
@@ -140,7 +134,7 @@ namespace Diary {
             CHACHA20_POLY1305::decrypt(
                 (uint32_t*) plain_key.data(), (uint32_t*) nonce, 
                 ciphertext.data(), ciphertext.size(),
-                timestamp_bytes, 8,
+                aad_bytes, 24,
                 tag, ciphertext.data()
             );
 
@@ -161,6 +155,16 @@ namespace Diary {
         } catch (...) {
             return std::nullopt;
         }
+    }
+
+    DiaryEntry random_entry(const std::vector<uint8_t>& plain_key) {
+        uint8_t random_title;
+        CryptoHelper::gen_secure_random_bytes(&random_title, 1);
+
+        uint8_t random_body[511];
+        CryptoHelper::gen_secure_random_bytes(random_body, 511);
+
+        return add_entry(std::string(reinterpret_cast<char*>(&random_title), 1), std::string(reinterpret_cast<char*>(random_body), 511), plain_key);
     }
 
     bool test_key(
