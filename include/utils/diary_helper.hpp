@@ -188,29 +188,31 @@ namespace Diary {
     }
 
     std::optional<std::string> get_duress_path(const fs::path& diary_path, const std::vector<uint8_t>& plain_key) {
-        std::vector<uint8_t> block = read_file_range(diary_path, DIARY_ENTRIES_START, (DIARY_ENTRY_HEADER_SIZE + 512) * 2);
+        std::vector<uint8_t> block = read_file_range(diary_path, 596, 564);
         
         if (block.size() < DIARY_ENTRY_HEADER_SIZE) return std::nullopt;
 
         uint8_t* ptr = block.data();
         size_t at = 0;
-        skip_entry(ptr, at);
+        auto entry = read_next_entry(ptr, at, plain_key);
 
-        // if (entry) return std::string(entry->content.c_str());
+        if (entry) return std::string(entry->content.c_str());
 
         return std::nullopt;
     }
 
-    std::vector<DiaryEntry> map_all_entries(
+    void map_all_entries(
+        std::vector<DiaryEntry>& entries,
         const fs::path& diary_path,
         const std::vector<uint8_t>& plain_key
     ) {
+        entries.clear();
+        
         size_t file_size = get_file_size(diary_path);
-        if (file_size <= 16) return {};
+        if (file_size <= 16) return;
 
         std::vector<uint8_t> data = read_file_range(diary_path, TRUE_ENTRIES_START, file_size - TRUE_ENTRIES_START);
         
-        std::vector<DiaryEntry> entries;
         uint8_t* ptr = data.data();
         size_t at = 0;
         size_t total_buffer_size = data.size();
@@ -227,8 +229,6 @@ namespace Diary {
                 break;
             }
         }
-
-        return entries;
     }
 
     void save_diary_entries(const fs::path& diary_path, const std::vector<DiaryEntry>& entries) {

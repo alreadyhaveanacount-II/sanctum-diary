@@ -19,6 +19,7 @@ Um diário local e criptografado para Windows. As entradas são protegidas com c
 - **Integração com o Windows Hello** — a chave de sessão pode ser encapsulada/desencapsulada usando o Windows Hello para reautenticação simplificada
 - **Bloqueio automático** — o diário é bloqueado automaticamente após 60 segundos de inatividade ou quando a sessão é trancada
 - **Gerenciamento seguro de memória** — buffers sensíveis são zerados após o uso e bloqueados na memória para evitar a troca para disco
+- **Negação plausível (Duress Password)** — suporte a uma senha de coação que desbloqueia um volume de fachada (decoy), protegendo a existência dos seus dados reais em cenários de adversidade.
 - **Busca de entradas** — permite pesquisar entradas por título ou data
 - **Interface imediata** — construída com [Dear ImGui](https://github.com/ocornut/imgui) + OpenGL/GLFW, sem dependências de frameworks de GUI pesados
 

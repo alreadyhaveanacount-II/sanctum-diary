@@ -408,9 +408,9 @@ namespace Pages {
                     append_binary(g_state.curr_diary, test_entry.serialized.data(), test_entry.serialized.size());
                     CryptoHelper::secure_zero_memory(random_key.data(), 32);
                 } else {
-                    uint8_t fake_data[32];
-                    CryptoHelper::gen_secure_random_bytes(fake_data, 32);
-                    append_binary(fs::path(dummyPath), fake_data, 32);
+                    uint8_t fake_data[1160];
+                    CryptoHelper::gen_secure_random_bytes(fake_data, 1160);
+                    append_binary(fs::path(dummyPath), fake_data, 1160);
 
                     // Generating the dummy entry
                     std::vector<uint8_t> fake_derivated;
@@ -444,7 +444,8 @@ namespace Pages {
                     std::optional<std::string> duress_path = Diary::get_duress_path(g_state.curr_diary, derivated);
                     
                     if(duress_path) {
-                        std::cout << "something";
+                        all_went_right = true;
+                        g_state.curr_diary = fs::path(*duress_path);
                     } else {
                         std::cout << "Incorrect password";
                     }
@@ -460,7 +461,7 @@ namespace Pages {
                 g_state.keydata = derivated;
                 CryptoHelper::lock_memory(g_state.keydata.data(), g_state.keydata.size());
 
-                g_state.decrypted_entries = Diary::map_all_entries(g_state.curr_diary, derivated);
+                Diary::map_all_entries(g_state.decrypted_entries, g_state.curr_diary, derivated);
                 CryptoHelper::lock_memory(g_state.decrypted_entries.data(), g_state.decrypted_entries.size());
 
                 dummyPath.clear();
@@ -559,7 +560,7 @@ namespace Pages {
         try {
             g_state.keydata = CryptoHelper::decrypt_with_hello(g_state.hello_keyname, g_state.keydata).value();
             CryptoHelper::lock_memory(g_state.keydata.data(), g_state.keydata.size());
-            g_state.decrypted_entries = Diary::map_all_entries(g_state.curr_diary, g_state.keydata);
+            Diary::map_all_entries(g_state.decrypted_entries, g_state.curr_diary, g_state.keydata);
             CryptoHelper::lock_memory(g_state.decrypted_entries.data(), g_state.decrypted_entries.size());
             g_state.is_diary_decrypted = true;
 
