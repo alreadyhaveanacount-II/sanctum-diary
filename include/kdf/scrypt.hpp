@@ -137,6 +137,11 @@ public:
     {
     }
 
+    ~Scrypt() {
+        CryptoHelper::secure_zero_memory(data.data(), data.size());
+        CryptoHelper::secure_zero_memory(salt.data(), salt.size());
+    }
+
     std::vector<uint8_t> kdf() {
         // 1. Initialize B: PBKDF2-HMAC-SHA256
         uint32_t buflen = p * 128 * r;

@@ -55,6 +55,7 @@ Cada arquivo `.sdde` é um binário plano com o seguinte layout:
 [16 bytes — salt (texto simples)]
 [16 bytes — parâmetros do scrypt: N (8 bytes LE) + r (4 bytes LE) + p (4 bytes LE)]
 [Entrada de validação]
+[Entrada duress]
 [Entrada 1]
 [Entrada 2]
 ...
@@ -65,9 +66,9 @@ Cada entrada é serializada como:
 ```
 [16 bytes — tag de autenticação Poly1305]
 [12 bytes — nonce do ChaCha20]
-[ 8 bytes — timestamp (LE) (usado como AAD)]
 [ 8 bytes — comprimento do título (LE)]
 [ 8 bytes — comprimento do conteúdo (LE)]
+[ 8 bytes — timestamp (LE) (usado como AAD)]
 [N bytes — título + conteúdo criptografados (concatenados, único texto cifrado)]
 ```
 

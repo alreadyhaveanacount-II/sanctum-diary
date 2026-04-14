@@ -8,7 +8,9 @@
 #include "utils/file_ops.hpp"
 #include "utils/diary_helper.hpp"
 #include <cstddef>
+#include <cstring>
 #include <format>
+#include <iomanip>
 #include <cstdint>
 #include <iostream>
 #include <vector>
@@ -22,9 +24,11 @@ namespace Pages {
 
         ImGui::Begin("Selecione uma entrada", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoBringToFrontOnFocus);
 
+        // Search input
         ImGui::Text("Pesquisar por texto em título");
         ImGui::InputText("##search", searchBuffer, sizeof(searchBuffer));
 
+        // Date filter inputs
         ImGui::PushItemWidth(40);
         ImGui::InputInt("##day", &day, 0, 0);
         ImGui::SameLine();
@@ -40,6 +44,7 @@ namespace Pages {
         ImGui::SameLine();
         ImGui::Text("(DD/MM/YYYY)");
 
+        // Search button
         if (ImGui::Button("Pesquisar", ImVec2(-FLT_MIN, 20))) {
             filtered_indices.clear();
             search_active = true;
@@ -47,10 +52,11 @@ namespace Pages {
             std::string searchStr = searchBuffer;
             std::transform(searchStr.begin(), searchStr.end(), searchStr.begin(), ::tolower);
 
-            for (size_t i = 1; i < g_state.decrypted_entries.size(); ++i) {
+            for (size_t i = 0; i < g_state.decrypted_entries.size(); ++i) {
                 auto& entry = g_state.decrypted_entries[i];
                 bool match = true;
 
+                // Text search
                 if (!searchStr.empty()) {
                     std::string titleLower = entry.title;
                     std::transform(titleLower.begin(), titleLower.end(), titleLower.begin(), ::tolower);
@@ -58,6 +64,7 @@ namespace Pages {
                         match = false;
                 }
 
+                // Date filter
                 if (match && (day != 0 || month != 0 || year != 0)) {
                     auto tp = std::chrono::system_clock::time_point{
                         std::chrono::milliseconds{entry.timestamp}
@@ -66,96 +73,104 @@ namespace Pages {
                     auto days_floor = std::chrono::floor<std::chrono::days>(lt);
                     std::chrono::year_month_day ymd{days_floor};
 
-                    if (day   != 0 && (int)(unsigned)ymd.day()   != day)   match = false;
+                    if (day != 0 && (int)(unsigned)ymd.day() != day) match = false;
                     if (month != 0 && (int)(unsigned)ymd.month() != month) match = false;
-                    if (year  != 0 && (int)ymd.year()            != year)  match = false;
+                    if (year != 0 && (int)ymd.year() != year) match = false;
                 }
 
                 if (match)
-                    filtered_indices.push_back(i); // stores real index into decrypted_entries
+                    filtered_indices.push_back(i);
             }
         }
 
         ImGui::Separator();
         ImGui::Spacing();
 
+        // New entry button
         if (ImGui::Button("+ Nova Entrada", ImVec2(-FLT_MIN, 45))) {
             CryptoHelper::secure_zero_memory(searchBuffer, sizeof(searchBuffer));
             filtered_indices.clear();
             search_active = false;
             day = month = year = 0;
-
             g_state.currentPage = PageEnum::CREATE_ENTRY;
         }
 
         ImGui::Separator();
         ImGui::Spacing();
 
+        // Scrollable list
         if (ImGui::BeginChild("ScrollableList", ImVec2(0, 0), true)) {
-            size_t render_count = search_active
-                ? filtered_indices.size()
-                : g_state.decrypted_entries.size() - 1;
+            if (g_state.decrypted_entries.empty()) {
+                ImGui::TextDisabled("Nenhuma entrada encontrada. Crie uma nova entrada.");
+            } else {
+                size_t render_count = search_active ? filtered_indices.size() : g_state.decrypted_entries.size();
 
-            for (size_t i = 0; i < render_count; ++i) {
-                // real_idx always points into decrypted_entries, regardless of filter state
-                size_t real_idx = search_active ? filtered_indices[i] : i + 1;
+                for (size_t render_idx = 0; render_idx < render_count; ++render_idx) {
+                    // Get the REAL index into decrypted_entries
+                    size_t real_index = search_active ? filtered_indices[render_idx] : render_idx;
+                    auto& entry = g_state.decrypted_entries[real_index];
+                    bool isSelected = (g_state.selected_entry_index == real_index);
 
-                auto& entry = g_state.decrypted_entries[real_idx];
-                bool isSelected = (g_state.selected_entry_index == real_idx);
+                    std::string selectableId = entry.title + "##" + std::to_string(real_index);
 
-                std::string selectableId = entry.title + "##" + std::to_string(real_idx);
+                    ImGui::BeginGroup();
 
-                ImGui::BeginGroup();
+                    // Selectable entry
+                    if (ImGui::Selectable(
+                            selectableId.c_str(),
+                            isSelected,
+                            ImGuiSelectableFlags_AllowOverlap,
+                            ImVec2(0, 60)))
+                    {
+                        g_state.selected_entry_index = real_index;
 
-                if (ImGui::Selectable(
-                        selectableId.c_str(),
-                        isSelected,
-                        ImGuiSelectableFlags_AllowOverlap,
-                        ImVec2(0, 60)))
-                {
-                    g_state.selected_entry_index = real_idx; // always a decrypted_entries index
+                        // Copy title and content to buffers
+                        CryptoHelper::secure_zero_memory(g_state.titleBuf, sizeof(g_state.titleBuf));
+                        std::strncpy(g_state.titleBuf, entry.title.c_str(), sizeof(g_state.titleBuf) - 1);
+                        g_state.titleBuf[sizeof(g_state.titleBuf) - 1] = '\0';
 
-                    CryptoHelper::secure_zero_memory(g_state.titleBuf, sizeof(g_state.titleBuf));
-                    std::strncpy(g_state.titleBuf, entry.title.c_str(), sizeof(g_state.titleBuf) - 1);
+                        CryptoHelper::secure_zero_memory(g_state.contentBuf, sizeof(g_state.contentBuf));
+                        std::strncpy(g_state.contentBuf, entry.content.c_str(), sizeof(g_state.contentBuf) - 1);
+                        g_state.contentBuf[sizeof(g_state.contentBuf) - 1] = '\0';
 
-                    CryptoHelper::secure_zero_memory(g_state.contentBuf, sizeof(g_state.contentBuf));
-                    std::strncpy(g_state.contentBuf, entry.content.c_str(), sizeof(g_state.contentBuf) - 1);
+                        // Reset search state
+                        CryptoHelper::secure_zero_memory(searchBuffer, sizeof(searchBuffer));
+                        filtered_indices.clear();
+                        search_active = false;
+                        day = month = year = 0;
 
-                    CryptoHelper::secure_zero_memory(searchBuffer, sizeof(searchBuffer));
-                    filtered_indices.clear();
-                    search_active = false;
-                    day = month = year = 0;
+                        g_state.currentPage = PageEnum::VIEW_ENTRY;
+                    }
 
-                    g_state.currentPage = PageEnum::VIEW_ENTRY;
+                    // Timestamp display (top-right corner of entry)
+                    {
+                        auto tp_ms = std::chrono::time_point_cast<std::chrono::milliseconds>(
+                            std::chrono::system_clock::time_point{std::chrono::milliseconds{entry.timestamp}}
+                        );
+                        auto local_tp = std::chrono::current_zone()->to_local(tp_ms);
+                        std::string full_date = std::format("{:%d/%m/%Y, %H:%M:%S}", local_tp);
+
+                        float dateWidth = ImGui::CalcTextSize(full_date.c_str()).x;
+                        float posX = ImGui::GetWindowWidth() - dateWidth - ImGui::GetStyle().ScrollbarSize - ImGui::GetStyle().WindowPadding.x;
+
+                        ImVec2 savedCursor = ImGui::GetCursorPos();
+                        ImGui::SetCursorPos(ImVec2(posX, savedCursor.y - 60));
+                        ImGui::TextDisabled("%s", full_date.c_str());
+                        ImGui::SetCursorPos(savedCursor);
+                    }
+
+                    // Content preview
+                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.7f, 0.7f, 0.7f, 1.0f));
+                    ImGui::TextWrapped("  %.50s...", entry.content.c_str());
+                    ImGui::PopStyleColor();
+
+                    ImGui::EndGroup();
+
+                    ImGui::Spacing();
+                    ImGui::Separator();
                 }
-
-                {
-                    auto tp_ms = std::chrono::time_point_cast<std::chrono::milliseconds>(
-                        std::chrono::system_clock::time_point{std::chrono::milliseconds{entry.timestamp}}
-                    );
-                    auto local_tp = std::chrono::current_zone()->to_local(tp_ms);
-                    std::string full_date = std::format("{:%d/%m/%Y, %H:%M:%S}", local_tp);
-
-                    float dateWidth = ImGui::CalcTextSize(full_date.c_str()).x;
-                    float posX = ImGui::GetWindowWidth() - dateWidth - ImGui::GetStyle().ScrollbarSize - ImGui::GetStyle().WindowPadding.x;
-
-                    ImVec2 savedCursor = ImGui::GetCursorPos();
-                    ImGui::SetCursorPos(ImVec2(posX, savedCursor.y - 60));
-                    ImGui::TextDisabled("%s", full_date.c_str());
-                    ImGui::SetCursorPos(savedCursor);
-                }
-
-                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.7f, 0.7f, 0.7f, 1.0f));
-                ImGui::TextWrapped("  %.50s...", entry.content.c_str());
-                ImGui::PopStyleColor();
-
-                ImGui::EndGroup();
-
-                ImGui::Spacing();
-                ImGui::Separator();
             }
         }
-
         ImGui::EndChild();
     }
 
@@ -287,7 +302,7 @@ namespace Pages {
             std::string path = CryptoHelper::OpenFileDialog((HWND)g_state.hwnd);
             if (!path.empty()) {
                 fs::path file_path(path);
-                // .sdde verificado pelo diálogo, mas garantimos aqui
+
                 if (file_path.extension() != ".sdde") file_path += ".sdde";
 
                 if (fs::exists(file_path)) {
@@ -319,9 +334,18 @@ namespace Pages {
         ImGui::PopStyleColor();
     }
 
+    void derivate_key(std::vector<uint8_t>& result, char* password, const std::vector<uint8_t>& salt, uint64_t N, uint32_t r, uint32_t p) {
+        std::vector<uint8_t> temp_pwd(password, password+strlen(password));
+        Scrypt scryptengine(temp_pwd, salt, N, r, p, 32);
+        result = scryptengine.kdf();
+        CryptoHelper::secure_zero_memory(temp_pwd.data(), temp_pwd.size());
+    }
+
     void handle_password() {
         static uint32_t N_exponent = 20; 
         static uint32_t r = 8, p = 1, dkLen = 32;
+        static char dummyPassword[256] = "";
+        static std::string dummyPath;
 
         // Estilo mais "limpo"
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(20, 20));
@@ -353,9 +377,6 @@ namespace Pages {
             // 2. Getting salt
             std::vector<uint8_t> salt = read_file_range(g_state.curr_diary, 0, 16);
 
-            // Deriving key
-            std::vector<uint8_t> password(g_state.pwdBuffer, g_state.pwdBuffer + strlen(g_state.pwdBuffer));
-
             if(!g_state.is_diary_new) {
                 std::vector<uint8_t> nrp = read_file_range(g_state.curr_diary, 16, 16);
                 N = Diary::from_bytes_le(nrp.data());
@@ -363,8 +384,8 @@ namespace Pages {
                 p = Diary::from_bytes_le_u32(nrp.data()+12);
             }
 
-            Scrypt scryptengine(password, salt, N, r, p, dkLen);
-            std::vector<uint8_t> derivated = scryptengine.kdf();
+            std::vector<uint8_t> derivated;
+            derivate_key(derivated, g_state.pwdBuffer, salt, N, r, p);
 
             bool all_went_right = true;
 
@@ -378,15 +399,54 @@ namespace Pages {
 
                 append_binary(g_state.curr_diary, params, 16);
                 append_binary(g_state.curr_diary, test_entry.serialized.data(), test_entry.serialized.size());
+                
+                if(dummyPath.empty()) {
+                    // Generating a random invalid entry
+                    std::vector<uint8_t> random_key(32, 0);
+                    CryptoHelper::gen_secure_random_bytes(random_key.data(), 32);
+                    test_entry = Diary::random_entry(random_key);
+                    append_binary(g_state.curr_diary, test_entry.serialized.data(), test_entry.serialized.size());
+                    CryptoHelper::secure_zero_memory(random_key.data(), 32);
+                } else {
+                    uint8_t fake_data[32];
+                    CryptoHelper::gen_secure_random_bytes(fake_data, 32);
+                    append_binary(fs::path(dummyPath), fake_data, 32);
+
+                    // Generating the dummy entry
+                    std::vector<uint8_t> fake_derivated;
+                    derivate_key(fake_derivated, dummyPassword, salt, N, r, p);
+
+                    uint8_t random_title_byte;
+                    CryptoHelper::gen_secure_random_bytes(&random_title_byte, 1);
+
+                    uint8_t random_body[511];
+
+                    size_t path_size = dummyPath.size();
+                    size_t copy_len = (path_size + 1 <= 511) ? path_size + 1 : 511;
+
+                    std::memcpy(random_body, dummyPath.c_str(), copy_len);
+
+                    if (copy_len < 511) {
+                        CryptoHelper::gen_secure_random_bytes(random_body + copy_len, 511 - copy_len);
+                    }
+
+                    Diary::DiaryEntry dummy_entry = Diary::add_entry(
+                        std::string(reinterpret_cast<const char*>(&random_title_byte), 1), 
+                        std::string(reinterpret_cast<const char*>(random_body), 511), 
+                        fake_derivated
+                    );
+
+                    append_binary(g_state.curr_diary, dummy_entry.serialized.data(), dummy_entry.serialized.size());
+                }
             } else {
                 if(!Diary::test_key(g_state.curr_diary, derivated)) {
                     all_went_right = false;
-                    std::cout << "Incorrect key\n";
-
-                    auto dummy_test = Diary::test_second_entry(g_state.curr_diary, derivated);
-                    if(dummy_test) {
-                        g_state.curr_diary = *dummy_test;
-                        CryptoHelper::secure_zero_memory(g_state.pwdBuffer, 256);
+                    std::optional<std::string> duress_path = Diary::get_duress_path(g_state.curr_diary, derivated);
+                    
+                    if(duress_path) {
+                        std::cout << "something";
+                    } else {
+                        std::cout << "Incorrect password";
                     }
                 }
             }
@@ -399,9 +459,12 @@ namespace Pages {
 
                 g_state.keydata = derivated;
                 CryptoHelper::lock_memory(g_state.keydata.data(), g_state.keydata.size());
-            
+
                 g_state.decrypted_entries = Diary::map_all_entries(g_state.curr_diary, derivated);
                 CryptoHelper::lock_memory(g_state.decrypted_entries.data(), g_state.decrypted_entries.size());
+
+                dummyPath.clear();
+                CryptoHelper::secure_zero_memory(dummyPassword, sizeof(dummyPassword));
             }
 
             CryptoHelper::secure_zero_memory(derivated.data(), derivated.size());
@@ -446,12 +509,35 @@ namespace Pages {
             ImGui::TreePop();
         }
 
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        if (ImGui::TreeNode("Senha secundária")) {
+            ImGui::Text("Digite uma senha secundária:");
+            ImGui::SetNextItemWidth(-1);
+            ImGui::InputText("##dummy_pwd", dummyPassword, IM_ARRAYSIZE(dummyPassword));
+
+            ImGui::Spacing();
+
+            ImGui::Text("Caminho do Diário falso:");
+            ImGui::SetNextItemWidth(-1);
+
+            ImGui::InputText("##dummy_path", (char*)dummyPath.c_str(), dummyPath.size() + 1, ImGuiInputTextFlags_ReadOnly);
+            ImGui::Spacing();
+
+            if (ImGui::Button("CRIAR DIÁRIO FALSO", ImVec2(-1, 30))) {
+                dummyPath = CryptoHelper::SaveFileDialog((HWND)g_state.hwnd);
+            }
+
+            ImGui::TreePop();
+        }
+
         ImGui::PopStyleVar(2);
     }
 
     void lock_sensitive_data() {
         if(g_state.is_diary_decrypted) {
-            g_state.decrypted_entries[0] = Diary::random_entry(g_state.keydata);
             Diary::save_diary_entries(g_state.curr_diary, g_state.decrypted_entries);
         }
 
@@ -485,7 +571,6 @@ namespace Pages {
 
     void cleanup() {
         if(g_state.is_diary_decrypted) {
-            g_state.decrypted_entries[0] = Diary::random_entry(g_state.keydata);
             Diary::save_diary_entries(g_state.curr_diary, g_state.decrypted_entries);
         }
 
