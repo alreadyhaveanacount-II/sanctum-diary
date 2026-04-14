@@ -528,7 +528,7 @@ namespace Pages {
             ImGui::Spacing();
 
             if (ImGui::Button("CRIAR DIÁRIO FALSO", ImVec2(-1, 30))) {
-                dummyPath = CryptoHelper::SaveFileDialog((HWND)g_state.hwnd);
+                dummyPath = CryptoHelper::SaveFileDialog((HWND)g_state.hwnd, false);
             }
 
             ImGui::TreePop();

@@ -62,7 +62,7 @@ namespace CryptoHelper {
         return "";
     }
 
-    std::string SaveFileDialog(HWND hwnd) {
+    std::string SaveFileDialog(HWND hwnd, bool restrict=true) {
         OPENFILENAMEA ofn;
         char szFile[MAX_PATH] = { 0 };
 
@@ -71,7 +71,7 @@ namespace CryptoHelper {
         ofn.hwndOwner = hwnd;
         ofn.lpstrFile = szFile;
         ofn.nMaxFile = sizeof(szFile);
-        ofn.lpstrFilter = "Sanctum Diary (*.sdde)\0*.sdde\0";
+        if(restrict) ofn.lpstrFilter = "Sanctum Diary (*.sdde)\0*.sdde\0";
         ofn.nFilterIndex = 1;
         ofn.lpstrFileTitle = NULL;
         ofn.nMaxFileTitle = 0;
