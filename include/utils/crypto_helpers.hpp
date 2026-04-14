@@ -71,13 +71,17 @@ namespace CryptoHelper {
         ofn.hwndOwner = hwnd;
         ofn.lpstrFile = szFile;
         ofn.nMaxFile = sizeof(szFile);
-        if(restrict) ofn.lpstrFilter = "Sanctum Diary (*.sdde)\0*.sdde\0";
+        if(restrict) {
+            ofn.lpstrFilter = "Sanctum Diary (*.sdde)\0*.sdde\0";
+        } else {
+            ofn.lpstrFilter = "All Files (*.*)\0*.*\0";
+        }
         ofn.nFilterIndex = 1;
         ofn.lpstrFileTitle = NULL;
         ofn.nMaxFileTitle = 0;
         ofn.lpstrInitialDir = NULL;
         ofn.Flags = OFN_PATHMUSTEXIST | OFN_OVERWRITEPROMPT | OFN_NOCHANGEDIR;
-        ofn.lpstrDefExt = "sdde";
+        if(restrict) ofn.lpstrDefExt = "sdde";
 
         if (GetSaveFileNameA(&ofn)) {
             return std::string(szFile);

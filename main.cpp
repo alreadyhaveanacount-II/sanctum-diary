@@ -75,6 +75,8 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    ImGui::GetIO().IniFilename = NULL;
+
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
 
