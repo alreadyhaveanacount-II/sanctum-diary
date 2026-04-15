@@ -124,7 +124,9 @@ O script de compilação compila `main.cpp` junto com todos os fontes do ImGui e
 main.cpp                        — Ponto de entrada da aplicação e loop de renderização
 include/
   app_state.hpp                 — Estado global da aplicação (g_state)
-  app_pages.hpp                 — Todas as implementações de páginas/telas ImGui
+  pages_entries.hpp             — Todas as implementações de páginas ImGui referentes à operações com entradas
+  pages_login.hpp               — Todas as implementações de páginas ImGui referentes à criação e abertura de diários
+  pages_security.hpp            — Todas as implementações de páginas Imgui referentes ào bloqueio automático
   encryption/
     aead/chacha20_poly1305.hpp  — Construção AEAD
     primitives/chacha20.hpp     — Cifra de fluxo ChaCha20

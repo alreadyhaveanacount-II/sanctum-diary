@@ -1,18 +1,18 @@
 #define GLFW_DLL
 #define GLFW_EXPOSE_NATIVE_WIN32
 #pragma comment(lib, "wtsapi32.lib")
-#include "include/app_pages.hpp"
-#include "include/app_state.hpp"
 #include "include/utils/crypto_helpers.hpp"
 #include <GLFW/glfw3.h>
 #include <GLFW/glfw3native.h>
-#include "include/utils/file_ops.hpp"
+#include "utils/file_ops.hpp"
 #include "imgui/imgui.h"
 #include "imgui/imgui_impl_glfw.h"
 #include "imgui/imgui_impl_opengl3.h"
-#include "app_pages.hpp"
-#include "app_state.hpp"
 #include "utils/crypto_helpers.hpp"
+#include "app_state.hpp"
+#include "pages_entries.hpp"
+#include "pages_login.hpp"
+#include "pages_security.hpp"
 #include <wtsapi32.h>
 
 StateMachine g_state;

@@ -99,7 +99,7 @@ namespace CryptoHelper {
         if (NCryptOpenStorageProvider(&hProv, MS_PLATFORM_KEY_STORAGE_PROVIDER, 0) != ERROR_SUCCESS) return false;
 
         // 2. Criar a chave
-        if (NCryptCreatePersistedKey(hProv, &hKey, BCRYPT_RSA_ALGORITHM, key_name.c_str(), 0, 0) != ERROR_SUCCESS) {
+        if (NCryptCreatePersistedKey(hProv, &hKey, BCRYPT_RSA_ALGORITHM, key_name.c_str(), 0, NCRYPT_OVERWRITE_KEY_FLAG) != ERROR_SUCCESS) {
             NCryptFreeObject(hProv);
             return false;
         }
@@ -115,6 +115,8 @@ namespace CryptoHelper {
         NCryptSetProperty(hKey, NCRYPT_UI_POLICY_PROPERTY, (PBYTE)&uiPolicy, sizeof(uiPolicy), 0);
 
         // 4. Finalizar a criação da chave (ela é gravada no TPM aqui)
+        DWORD exportPolicy = 0;
+        NCryptSetProperty(hKey, NCRYPT_EXPORT_POLICY_PROPERTY, (PBYTE)&exportPolicy, sizeof(DWORD), 0);
         SECURITY_STATUS status = NCryptFinalizeKey(hKey, 0);
 
         NCryptFreeObject(hKey);
