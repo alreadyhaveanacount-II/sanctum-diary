@@ -249,7 +249,11 @@ namespace Diary {
             data_ptr += entry.serialized.size();
         }
 
+        fs::copy_file(diary_path, fs::path(diary_path).replace_extension(".backup"));
+
         truncate_file(diary_path, TRUE_ENTRIES_START);
         rewrite_binary_section(diary_path, encrypted_data.data(), encrypted_data.size(), TRUE_ENTRIES_START);
+
+        fs::remove(fs::path(diary_path).replace_extension(".backup"));
     }
 }

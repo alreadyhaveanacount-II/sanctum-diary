@@ -199,14 +199,6 @@ namespace Pages {
 
                 dummyPath.clear();
                 CryptoHelper::secure_zero_memory(dummyPassword, sizeof(dummyPassword));
-
-                fs::path files_db = g_state.curr_diary;
-                files_db.replace_extension(""); 
-
-                if(!fs::exists(files_db)) {
-                    std::ofstream file(files_db); 
-                    file.close();
-                }
             }
 
             CryptoHelper::secure_zero_memory(derivated.data(), derivated.size());
@@ -255,24 +247,26 @@ namespace Pages {
         ImGui::Separator();
         ImGui::Spacing();
 
-        if (ImGui::TreeNode("Senha secundária")) {
-            ImGui::Text("Digite uma senha secundária:");
-            ImGui::SetNextItemWidth(-1);
-            ImGui::InputText("##dummy_pwd", dummyPassword, IM_ARRAYSIZE(dummyPassword));
+        if(g_state.is_diary_new) {
+            if (ImGui::TreeNode("Senha secundária")) {
+                ImGui::Text("Digite uma senha secundária:");
+                ImGui::SetNextItemWidth(-1);
+                ImGui::InputText("##dummy_pwd", dummyPassword, IM_ARRAYSIZE(dummyPassword));
 
-            ImGui::Spacing();
+                ImGui::Spacing();
 
-            ImGui::Text("Caminho do Diário falso:");
-            ImGui::SetNextItemWidth(-1);
+                ImGui::Text("Caminho do Diário falso:");
+                ImGui::SetNextItemWidth(-1);
 
-            ImGui::InputText("##dummy_path", (char*)dummyPath.c_str(), dummyPath.size() + 1, ImGuiInputTextFlags_ReadOnly);
-            ImGui::Spacing();
+                ImGui::InputText("##dummy_path", (char*)dummyPath.c_str(), dummyPath.size() + 1, ImGuiInputTextFlags_ReadOnly);
+                ImGui::Spacing();
 
-            if (ImGui::Button("CRIAR DIÁRIO FALSO", ImVec2(-1, 30))) {
-                dummyPath = CryptoHelper::SaveFileDialog((HWND)g_state.hwnd, false);
+                if (ImGui::Button("CRIAR DIÁRIO FALSO", ImVec2(-1, 30))) {
+                    dummyPath = CryptoHelper::SaveFileDialog((HWND)g_state.hwnd, false);
+                }
+
+                ImGui::TreePop();
             }
-
-            ImGui::TreePop();
         }
 
         ImGui::PopStyleVar(2);
